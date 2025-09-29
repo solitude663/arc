@@ -15,9 +15,9 @@ internal void MainEntry(i32 argc, char** argv)
 	String8 file_to_compile = Str8C(argv[1]);
 	String8 file_contents = OS_FileReadAll(arena, file_to_compile);
 	
-	printf("File: %.*s\n%.*s", Str8Print(file_to_compile), Str8Print(file_contents));
+	printf("File: %.*s\n%.*s\n", Str8Print(file_to_compile), Str8Print(file_contents));
 
-	Parser parser;
+	Parser parser = {0};
 	parser.Arena = arena;
 	parser.Data = file_contents;
 	Parse(&parser);

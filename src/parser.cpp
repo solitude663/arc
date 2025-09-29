@@ -1,11 +1,21 @@
+inline u8 CurrentChar(Parser* parser)
+{
+	u8 result = 0;
+	if(parser->CurrentOffset < parser->Data.Length)
+		result = parser->Data.Str[parser->CurrentOffset];
+	return result;
+}
 
 internal void EatWhitespace(Parser* parser)
 {
-	u8 current = parser->Data.Str[parser->CurrentOffset];
-	while(((current == ' ') || (current == '\n') || current == '\r') ||
-		  (current == '\t'))
+	u8 current = CurrentChar(parser);
+	while(((current == ' ') ||
+		   (current == '\n') ||
+		   (current == '\r') ||
+		   (current == '\t')))
 	{
-		u8 current = parser->Data.Str[++parser->CurrentOffset];
+		parser->CurrentOffset++;
+		current = CurrentChar(parser);
 	}
 }
 
@@ -19,6 +29,7 @@ internal TokenType GetKeywordOrIdentifier(String8 lexeme)
 
 internal const char* GetTokenTypeString(Token t)
 {
+	if(t.Type == '\0') return "EOF";
 	if(t.Type == '(') return "Open Paren";
 	if(t.Type == ')') return "Close Paren";
 	if(t.Type == '+') return "Plus";
@@ -29,15 +40,21 @@ internal const char* GetTokenTypeString(Token t)
 	if(t.Type == ';') return "Semi Colon";
 	if(t.Type == '=') return "Equal";
 
-	return "";
+	if(t.Type == Token_Invalid) return "<Invalid>";
+	if(t.Type == Token_Identifier) return "<identifier>";
+	if(t.Type == Token_IntegerLiteral) return "<int>";
+	if(t.Type == Token_Print) return "Print";
+	if(t.Type == Token_Invalid) return "Token_Invalid";
+
+	return "(null)";
 }
 
 internal Token ParseToken(Parser* parser)
 {
-	Token result = {};
+	Token result = {};	
 	EatWhitespace(parser);
-	
-	u8 current = parser->Data.Str[parser->CurrentOffset];
+
+	u8 current = CurrentChar(parser);
 	switch(current)
 	{
 		case('('):
@@ -49,12 +66,18 @@ internal Token ParseToken(Parser* parser)
 		case(':'):
 		case(';'):
 		case('='):
-		case('\0'):
 		{			
 			result.Type = (TokenType)current;
 			result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
 			parser->CurrentOffset++;
 		}break;		
+		
+		case(0):
+		{
+			result.Type = Token_EOF;
+			result.Lexeme = Str8CLit("EOF");
+			parser->CurrentOffset++;
+		}break;
 		
 		default:
 		{
@@ -63,7 +86,8 @@ internal Token ParseToken(Parser* parser)
 				u64 start = parser->CurrentOffset;
 				while(IsDigit(current))
 				{
-					current = parser->Data.Str[++parser->CurrentOffset];
+					parser->CurrentOffset++;
+					current = CurrentChar(parser);
 				}
 				u64 end = parser->CurrentOffset;
 				
@@ -75,7 +99,8 @@ internal Token ParseToken(Parser* parser)
 				u64 start = parser->CurrentOffset;				
 				while((IsDigit(current) || IsAlpha(current) || current == '_'))
 				{
-					current = parser->Data.Str[++parser->CurrentOffset];
+					parser->CurrentOffset++;
+					current = CurrentChar(parser);
 				}				
 				u64 end = parser->CurrentOffset;
 
@@ -101,7 +126,7 @@ internal Token PeekToken(Parser* parser, i32 depth = 0)
 	 * Should not request deeper than the buffer can hold. It will eat tokens that 
 	 * were not used yet used. */
 	Assert(depth < TOKEN_RING_BUFFER_SIZE);
-
+	
 	i32 tokens_processed = 0;
 	i32 tokens_to_process = (depth+1) - parser->LiveTokens;
 	for(i32 i = 0; i < tokens_to_process; i++)
@@ -134,8 +159,8 @@ internal void AdvanceToken(Parser* parser, u32 distance = 1)
 }
 
 internal Token NextToken(Parser* parser)
-{
-	Token result = PeekToken(parser, 0);
+{	
+	Token result = PeekToken(parser, 0);	
 	AdvanceToken(parser);
 	return result;
 }
@@ -145,7 +170,7 @@ internal void Parse(Parser* parser)
 	for(;;)
 	{
 		Token t = NextToken(parser);		
-		LogInfoF(0, "%S of type %s\n", t.Lexeme, GetTokenTypeString(t));
+		LogInfoF(0, "Lexeme: %S of Type: %s", t.Lexeme, GetTokenTypeString(t));
 		if(t.Type == Token_EOF)
 			break;
 	}
