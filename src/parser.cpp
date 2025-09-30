@@ -19,11 +19,12 @@ internal void EatWhitespace(Parser* parser)
 	}
 }
 
-internal TokenType GetKeywordOrIdentifier(String8 lexeme)
+internal TokenType GetKeywordOrIdentifier(const String8& lexeme)
 {
 	TokenType result = Token_Identifier;
 	
 	if(lexeme == "print") result = Token_Print;
+	if(lexeme == "int") result = Token_Int;
 	return result;
 }
 
@@ -243,6 +244,12 @@ internal ASTNode* ParsePrimary(Parser* parser)
 		result = CreateASTNode(parser->Arena, Node_IntegerLiteral);
 		result->Value = token;
 	}
+	else if(token.Type == Token_Identifier)
+	{
+		AdvanceToken(parser);
+		result = CreateASTNode(parser->Arena, Node_Lookup);
+		result->Value = token;
+	}
 	else
 	{
 		LogPanicF(0, "Error: Unhandled token <%s> in ParsePrimary",
@@ -287,12 +294,65 @@ internal ASTNode* ParseExpression(Parser* parser)
 	return ParseBinaryExpression(parser);
 }
 
+internal TypeDef* ParseType(Parser* parser)
+{
+	TypeDef* result = 0;
+	
+	Token tk = PeekToken(parser);
+	if(tk.Type == Token_Int)
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Int;
+	}
+
+	return result;
+}
+
 internal ASTNode* ParseStatement(Parser* parser)
 {
 	ASTNode* result;
 	Token current_token = PeekToken(parser);
 	switch(current_token.Type)
 	{
+		case(Token_Identifier):
+		{
+			Token next_token = PeekToken(parser, 1);
+			
+			switch(next_token.Type)
+			{
+				case(Token_Colon):
+				{
+					AdvanceToken(parser, 2);
+					TypeDef* type = ParseType(parser);
+					// TODO(afb) :: Ensure type is valid
+					MatchToken(parser, Token_SemiColon);
+					
+					result = CreateASTNode(parser->Arena, Node_VariableDeclaration);
+					result->VDecl.Ident = current_token;
+					result->VDecl.Type  = type;
+				}break;
+
+				case(Token_Equal):
+				{
+					AdvanceToken(parser, 2);
+					ASTNode* expr = ParseExpression(parser);
+					MatchToken(parser, Token_SemiColon);
+
+					result = CreateASTNode(parser->Arena, Node_Assignment);
+					result->Assignment.Ident = current_token;
+					result->Assignment.Value = expr;
+				}break;
+				
+				default:
+				{
+					result = ParseExpression(parser);
+					MatchToken(parser, Token_SemiColon);
+				}break;
+			}
+			
+		}break;
+		
 		case(Token_Print):
 		{
 			AdvanceToken(parser);

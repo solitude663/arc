@@ -20,6 +20,7 @@ enum TokenType
 
 	Token_Identifier,
 	Token_Print,
+	Token_Int,
 
 	Token_Count,
 };
@@ -45,11 +46,16 @@ struct Parser
 };
 
 struct ASTNode;
+struct TypeDef;
+
 enum NodeType
 {
 	Node_Print,
 	Node_Binary,
 	Node_IntegerLiteral,
+	Node_Lookup,
+	Node_VariableDeclaration,
+	Node_Assignment,
 };
 
 enum OperatorType
@@ -59,6 +65,32 @@ enum OperatorType
 	Op_Multiplication,
 	Op_Division,
 	Op_None,
+};
+
+enum TypeKind
+{
+	Type_Int,
+	Type_Bool,
+	Type_Pointer,
+	Type_Array,
+};
+
+struct TypeDef
+{
+	TypeKind Type;
+	TypeDef* Base;
+};
+
+struct VarDeclaration
+{
+	Token Ident;
+	TypeDef* Type;
+};
+
+struct VarAssignment
+{
+	Token Ident;
+	ASTNode* Value;
 };
 
 struct PrintNode
@@ -74,7 +106,6 @@ struct BinaryNode
 };
 
 
-
 struct ASTNode
 {
 	NodeType Type;
@@ -84,6 +115,8 @@ struct ASTNode
 		Token Value;
 		PrintNode Print;
 		BinaryNode Binary;
+		VarAssignment Assignment;
+		VarDeclaration VDecl;
 	};
 
 	ASTNode* Next;

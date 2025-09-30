@@ -15,7 +15,7 @@ include_flags="-I$HOME/projects/core/src/core"
 g++ $include_flags $compiler_flags -o ./arc ../src/main.cpp
 
 pushd ../data  > /dev/null
-../build/arc ./test_01.arc
+../build/arc ./test_02.arc
 
 popd > /dev/null
 

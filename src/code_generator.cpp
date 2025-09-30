@@ -24,6 +24,29 @@ internal i32 GenerateNode(CodeGenerator* cg, ASTNode* node)
 	i32 result = 0;
 	switch(node->Type)
 	{
+		case(Node_VariableDeclaration):
+		{
+			// TODO(afb) :: Handle other types
+			Str8ListPushF(cg->Arena, cg->DataBuilder, "\t%S resq 1",
+						  node->VDecl.Ident.Lexeme);
+		}break;		
+
+		case(Node_Assignment):
+		{
+			i32 reg = GenerateNode(cg, node->Assignment.Value);
+			Str8ListPushF(cg->Arena, cg->CodeBuilder, "\tmov [%S], %s",
+						  node->VDecl.Ident.Lexeme, RegisterNames[reg]);
+			FreeRegister(cg, reg);
+		}break;
+
+		case(Node_Lookup):
+		{
+			i32 reg = AllocRegister(cg);
+			Str8ListPushF(cg->Arena, cg->CodeBuilder, "\tmov %s, qword[%S]",
+						  RegisterNames[reg], node->Value.Lexeme);
+			result = reg;
+		}break;
+		
 		case(Node_IntegerLiteral):
 		{
 			i32 reg = AllocRegister(cg);
@@ -36,7 +59,7 @@ internal i32 GenerateNode(CodeGenerator* cg, ASTNode* node)
 		{
 			i32 reg1 = GenerateNode(cg, node->Binary.Left);
 			i32 reg2 = GenerateNode(cg, node->Binary.Right);
-
+			
 			switch(node->Binary.Operator)
 			{
 				case(Op_Addition):
@@ -101,6 +124,9 @@ internal String8 GenerateAssembly(M_Arena* arena, ASTNode* program)
 	cg.CodeBuilder = &code_builder;
 	cg.DataBuilder = &data_builder;
 
+	Str8ListPush(arena, cg.DataBuilder,
+				 "\nsection .bss");
+	
 	Str8ListPush(arena, cg.CodeBuilder,
 				 "BITS 64\n"
 				 "CPU X64\n\n"
@@ -119,6 +145,10 @@ internal String8 GenerateAssembly(M_Arena* arena, ASTNode* program)
 				 "\tsyscall\n"
 				 "\nsection .data\n"
 				 "\tint_format db \"%d\", 10, 0");
+
+	String8 data = Str8Join(arena, data_builder, "\n");
+
+	Str8ListPush(arena, cg.CodeBuilder, data);
 	String8 result = Str8Join(arena, code_builder, "\n");
 	return result;
 }
