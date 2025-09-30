@@ -4,6 +4,9 @@
 #include "./parser.h"
 #include "./parser.cpp"
 
+#include "./code_generator.h"
+#include "./code_generator.cpp"
+
 internal void MainEntry(i32 argc, char** argv)
 {
 	if(argc < 2)
@@ -20,8 +23,23 @@ internal void MainEntry(i32 argc, char** argv)
 	Parser parser = {0};
 	parser.Arena = arena;
 	parser.Data = file_contents;
-	Parse(&parser);
-	
+	ASTNode* program = Parse(&parser);
+
+	// CodeGenerator code_gen = {0};
+	// code_gen.Arena = arena;
+
+	String8 output = GenerateAssembly(arena, program);
+	String8 output_filename = "./out.nasm";
+	OS_Handle handle = OS_FileOpen(output_filename,
+								   OS_AccessFlag_CreateNew | OS_AccessFlag_Read | 
+								   OS_AccessFlag_Write);
+
+	if(OS_FileIsValid(handle))
+	{
+		OS_FileWrite(handle, output);
+		OS_FileClose(handle);
+		LogInfoF(0, "Output %S", output_filename);
+	}
 }
 
 int main(int argc, char** argv)

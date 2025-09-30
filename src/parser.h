@@ -44,4 +44,49 @@ struct Parser
 	u64 LiveTokens;
 };
 
+struct ASTNode;
+enum NodeType
+{
+	Node_Print,
+	Node_Binary,
+	Node_IntegerLiteral,
+};
+
+enum OperatorType
+{
+	Op_Addition,
+	Op_Subtraction,
+	Op_Multiplication,
+	Op_Division,
+	Op_None,
+};
+
+struct PrintNode
+{
+	ASTNode* Expression;
+};
+
+struct BinaryNode
+{
+	OperatorType Operator;
+	ASTNode* Left;
+	ASTNode* Right;
+};
+
+
+
+struct ASTNode
+{
+	NodeType Type;
+
+	union
+	{
+		Token Value;
+		PrintNode Print;
+		BinaryNode Binary;
+	};
+
+	ASTNode* Next;
+};
+
 #endif // Header guard

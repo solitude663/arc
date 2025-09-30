@@ -27,24 +27,24 @@ internal TokenType GetKeywordOrIdentifier(String8 lexeme)
 	return result;
 }
 
-internal const char* GetTokenTypeString(Token t)
+internal const char* GetTokenTypeString(TokenType type)
 {
-	if(t.Type == '\0') return "EOF";
-	if(t.Type == '(') return "Open Paren";
-	if(t.Type == ')') return "Close Paren";
-	if(t.Type == '+') return "Plus";
-	if(t.Type == '-') return "Minus";
-	if(t.Type == '*') return "Star";
-	if(t.Type == '/') return "Slash";
-	if(t.Type == ':') return "Colon";
-	if(t.Type == ';') return "Semi Colon";
-	if(t.Type == '=') return "Equal";
+	if(type == '\0') return "EOF";
+	if(type == '(') return "Open Paren";
+	if(type == ')') return "Close Paren";
+	if(type == '+') return "Plus";
+	if(type == '-') return "Minus";
+	if(type == '*') return "Star";
+	if(type == '/') return "Slash";
+	if(type == ':') return "Colon";
+	if(type == ';') return "Semi Colon";
+	if(type == '=') return "Equal";
 
-	if(t.Type == Token_Invalid) return "<Invalid>";
-	if(t.Type == Token_Identifier) return "<identifier>";
-	if(t.Type == Token_IntegerLiteral) return "<int>";
-	if(t.Type == Token_Print) return "Print";
-	if(t.Type == Token_Invalid) return "Token_Invalid";
+	if(type == Token_Invalid) return "<Invalid>";
+	if(type == Token_Identifier) return "<identifier>";
+	if(type == Token_IntegerLiteral) return "<int>";
+	if(type == Token_Print) return "Print";
+	if(type == Token_Invalid) return "Token_Invalid";
 
 	return "(null)";
 }
@@ -165,13 +165,181 @@ internal Token NextToken(Parser* parser)
 	return result;
 }
 
-internal void Parse(Parser* parser)
+internal ASTNode* CreateASTNode(M_Arena* arena, NodeType type)
 {
+	ASTNode* result = PushStructZero(arena, ASTNode);
+	result->Type = type;
+	return result;
+}
+
+internal Token MatchToken(Parser* parser, TokenType type)
+{
+	Token result = PeekToken(parser, 0);
+	if(result.Type != type)
+	{
+		// TODO(afb) :: Report error
+		LogErrorF(0, "Match error: Expected %s but recieved %s",
+				  GetTokenTypeString(type), GetTokenTypeString(result.Type));
+		result.Type = type;
+	}
+	AdvanceToken(parser);
+	return result;
+}
+
+internal b8 IsBinaryOp(TokenType type)
+{
+	b8 result = (type == '+') || (type == '-') || (type == '*') || (type == '/');
+	return result;
+}
+
+internal i32 OperatorPrecedence(TokenType type)
+{
+	switch(type)
+	{
+		// case Token_EQ:
+		// case Token_NE:
+		// 	return 0;
+		// case Token_GT:
+		// case Token_GE:
+		// case Token_LT:
+		// case Token_LE:
+		// 	return 10;
+		case '+':
+		case '-':
+			return 20;
+		case '*':
+		case '/':
+		case '%':
+			return 30;
+		default:
+			return 0;
+	}
+}
+
+internal b8 IsLeftAssociative(TokenType type)
+{
+	return ((type == '+') || (type == '-') || (type == '*') || (type == '/'));/* ||
+			(type == Token_GE) || (type == Token_GT) || (type == Token_LE) || (type == Token_LT) ||
+			(type == Token_EQ) || (type == Token_NE));*/
+}
+
+inline OperatorType GetOperatorFromToken(TokenType type)
+{
+	if(type == Token_Plus) return Op_Addition;
+	if(type == Token_Minus) return Op_Subtraction;
+	if(type == Token_Star) return Op_Multiplication;
+	if(type == Token_Slash) return Op_Division;
+	return Op_None;
+}
+
+internal ASTNode* ParsePrimary(Parser* parser)
+{
+	ASTNode* result = 0;	
+
+	Token token = PeekToken(parser);
+	if(token.Type == Token_IntegerLiteral)
+	{
+		AdvanceToken(parser);
+		result = CreateASTNode(parser->Arena, Node_IntegerLiteral);
+		result->Value = token;
+	}
+	else
+	{
+		LogPanicF(0, "Error: Unhandled token <%s> in ParsePrimary",
+				  GetTokenTypeString(token.Type));
+	}
+
+	return result;
+}
+
+
+internal ASTNode* ParseBinaryExpression(Parser* parser, i32 min_precedence = 0)
+{
+	ASTNode* left = ParsePrimary(parser);
+
 	for(;;)
 	{
-		Token t = NextToken(parser);		
+		Token op = PeekToken(parser);
+		if(!IsBinaryOp(op.Type)) break;
+
+		i32 precedence = OperatorPrecedence(op.Type);
+		if(precedence < min_precedence)
+			break;
+		
+		b8 left_associative = IsLeftAssociative(op.Type);
+		i32 new_min_precedence = left_associative ? precedence + 1 : precedence;
+
+		AdvanceToken(parser);
+		
+		ASTNode* right = ParseBinaryExpression(parser, new_min_precedence);
+		ASTNode* temp = CreateASTNode(parser->Arena, Node_Binary);
+		temp->Binary.Operator = GetOperatorFromToken(op.Type);
+		temp->Binary.Left = left;
+		temp->Binary.Right = right;
+		left = temp;
+	}
+
+	return left;
+}
+
+internal ASTNode* ParseExpression(Parser* parser)
+{
+	return ParseBinaryExpression(parser);
+}
+
+internal ASTNode* ParseStatement(Parser* parser)
+{
+	ASTNode* result;
+	Token current_token = PeekToken(parser);
+	switch(current_token.Type)
+	{
+		case(Token_Print):
+		{
+			AdvanceToken(parser);
+			MatchToken(parser, Token_OpenParen);
+			ASTNode* expr = ParseExpression(parser);
+			MatchToken(parser, Token_CloseParen);
+			MatchToken(parser, Token_SemiColon);
+			
+			result = CreateASTNode(parser->Arena, Node_Print);
+			result->Print.Expression = expr;
+			
+		}break;
+		
+		default:
+		{
+			result = ParseExpression(parser);
+			MatchToken(parser, Token_SemiColon);
+		}
+	}
+	return result;
+}
+
+internal ASTNode* Parse(Parser* parser)
+{
+	ASTNode* result = 0;
+	ASTNode* last_node = 0;
+	for(;;)
+	{
+#if 1
+		ASTNode* node = ParseStatement(parser);
+		if(result)
+		{
+			last_node->Next = node;
+			last_node = node;
+		}
+		else
+		{
+			result = last_node = node;
+		}
+
+		if(PeekToken(parser).Type == Token_EOF) break;
+#else
+		Token t = NextToken(parser);
 		LogInfoF(0, "Lexeme: %S of Type: %s", t.Lexeme, GetTokenTypeString(t));
 		if(t.Type == Token_EOF)
 			break;
+#endif
 	}
+	return result;
 }
