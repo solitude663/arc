@@ -7,6 +7,9 @@
 #include "./code_generator.h"
 #include "./code_generator.cpp"
 
+#include "./type_checker.h"
+#include "./type_checker.cpp"
+
 internal void MainEntry(i32 argc, char** argv)
 {
 	if(argc < 2)
@@ -28,6 +31,10 @@ internal void MainEntry(i32 argc, char** argv)
 	// CodeGenerator code_gen = {0};
 	// code_gen.Arena = arena;
 
+	TypeChecker type_checker = {};
+	TypeCheckerInit(&type_checker);
+	TypeCheck(&type_checker, program);
+	
 	String8 output = GenerateAssembly(arena, program);
 	String8 output_filename = "./out.nasm";
 	OS_Handle handle = OS_FileOpen(output_filename,

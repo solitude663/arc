@@ -1,6 +1,8 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include "./type_checker.h"
+
 enum TokenType
 {
 	Token_OpenParen = '(',
@@ -12,6 +14,8 @@ enum TokenType
 	Token_Colon = ':',
 	Token_SemiColon = ';',
 	Token_Equal = '=',
+	Token_OpenBracket = '[',
+	Token_CloseBracket = ']',
 
 	Token_EOF = '\0',
 	Token_Invalid = 404,
@@ -21,6 +25,9 @@ enum TokenType
 	Token_Identifier,
 	Token_Print,
 	Token_Int,
+	Token_Bool,
+	Token_True,
+	Token_False,
 
 	Token_Count,
 };
@@ -50,12 +57,13 @@ struct TypeDef;
 
 enum NodeType
 {
-	Node_Print,
-	Node_Binary,
 	Node_IntegerLiteral,
+	Node_BoolLiteral,
+	Node_Binary,
 	Node_Lookup,
 	Node_VariableDeclaration,
 	Node_Assignment,
+	Node_Print,
 };
 
 enum OperatorType
@@ -67,17 +75,10 @@ enum OperatorType
 	Op_None,
 };
 
-enum TypeKind
-{
-	Type_Int,
-	Type_Bool,
-	Type_Pointer,
-	Type_Array,
-};
-
 struct TypeDef
 {
 	TypeKind Type;
+	Token Size;
 	TypeDef* Base;
 };
 
@@ -109,7 +110,8 @@ struct BinaryNode
 struct ASTNode
 {
 	NodeType Type;
-
+	TypeIndex EvalType;
+	
 	union
 	{
 		Token Value;

@@ -25,6 +25,9 @@ internal TokenType GetKeywordOrIdentifier(const String8& lexeme)
 	
 	if(lexeme == "print") result = Token_Print;
 	if(lexeme == "int") result = Token_Int;
+	if(lexeme == "bool") result = Token_Bool;
+	if(lexeme == "true") result = Token_True;
+	if(lexeme == "false") result = Token_False;
 	return result;
 }
 
@@ -67,6 +70,8 @@ internal Token ParseToken(Parser* parser)
 		case(':'):
 		case(';'):
 		case('='):
+		case('['):
+		case(']'):
 		{			
 			result.Type = (TokenType)current;
 			result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
@@ -244,6 +249,12 @@ internal ASTNode* ParsePrimary(Parser* parser)
 		result = CreateASTNode(parser->Arena, Node_IntegerLiteral);
 		result->Value = token;
 	}
+	else if(token.Type == Token_True || token.Type == Token_False)
+	{
+		AdvanceToken(parser);
+		result = CreateASTNode(parser->Arena, Node_BoolLiteral);
+		result->Value = token;		
+	}
 	else if(token.Type == Token_Identifier)
 	{
 		AdvanceToken(parser);
@@ -304,6 +315,29 @@ internal TypeDef* ParseType(Parser* parser)
 		AdvanceToken(parser);
 		result = PushStructZero(parser->Arena, TypeDef);
 		result->Type = Type_Int;
+	}
+	if(tk.Type == Token_Bool)
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Bool;
+	}
+	else if(tk.Type == Token_Star) // Poitners
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Pointer;
+		result->Base = ParseType(parser);
+	}
+	else if(tk.Type == Token_OpenBracket) // Arrays
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Array;
+		Token size = MatchToken(parser, Token_IntegerLiteral);
+		result->Size = size;
+		MatchToken(parser, Token_CloseBracket);
+		result->Base = ParseType(parser);		
 	}
 
 	return result;

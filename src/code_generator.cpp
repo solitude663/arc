@@ -27,8 +27,18 @@ internal i32 GenerateNode(CodeGenerator* cg, ASTNode* node)
 		case(Node_VariableDeclaration):
 		{
 			// TODO(afb) :: Handle other types
-			Str8ListPushF(cg->Arena, cg->DataBuilder, "\t%S resq 1",
-						  node->VDecl.Ident.Lexeme);
+			if(node->VDecl.Type->Type != Type_Array)
+			{
+				Str8ListPushF(cg->Arena, cg->DataBuilder, "\t%S resq 1",
+							  node->VDecl.Ident.Lexeme);
+			}
+			else
+			{
+				Str8ListPushF(cg->Arena, cg->DataBuilder, "\t%S resq %S",
+							  node->VDecl.Ident.Lexeme,
+							  node->VDecl.Type->Size.Lexeme);
+			}
+
 		}break;		
 
 		case(Node_Assignment):
@@ -55,6 +65,15 @@ internal i32 GenerateNode(CodeGenerator* cg, ASTNode* node)
 			result = reg;
 		}break;
 
+		case(Node_BoolLiteral):
+		{
+			i32 reg = AllocRegister(cg);
+			Str8ListPushF(cg->Arena, cg->CodeBuilder, "\tmov %s, %s",
+						  RegisterNames[reg],
+						  node->Value.Lexeme.Str[0] == 't' ? "1" : "0");
+			result = reg;
+		}break;
+		
 		case(Node_Binary):
 		{
 			i32 reg1 = GenerateNode(cg, node->Binary.Left);
