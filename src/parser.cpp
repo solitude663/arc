@@ -1,3 +1,11 @@
+inline u8 PeekChar(Parser* parser)
+{
+	u8 result = 0;
+	if((parser->CurrentOffset+1) < parser->Data.Length)
+		result = parser->Data.Str[parser->CurrentOffset+1];
+	return result;
+}
+
 inline u8 CurrentChar(Parser* parser)
 {
 	u8 result = 0;
@@ -53,6 +61,25 @@ internal const char* GetTokenTypeString(TokenType type)
 	return "(null)";
 }
 
+internal Token MatchType2(Parser* parser, TokenType t1, TokenType t2, u8 ch)
+{
+	Token result;
+	u8 next = PeekChar(parser);
+	if(next == ch)
+	{
+		result.Type = t2;
+		result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 2);
+		parser->CurrentOffset += 2;
+	}
+	else
+	{
+		result.Type = t1;
+		result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
+		parser->CurrentOffset++;
+	}
+	return result;
+}
+
 internal Token ParseToken(Parser* parser)
 {
 	Token result = {};	
@@ -67,16 +94,23 @@ internal Token ParseToken(Parser* parser)
 		case('*'):
 		case('-'):
 		case('/'):			
-		case(':'):
 		case(';'):
 		case('='):
 		case('['):
 		case(']'):
+		case('{'):
+		case('}'):
+		case(','):
 		{			
 			result.Type = (TokenType)current;
 			result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
 			parser->CurrentOffset++;
 		}break;		
+
+		case(':'):
+		{
+			result = MatchType2(parser, (TokenType)':', Token_ColonColon, ':');
+		}break;
 		
 		case(0):
 		{
@@ -238,6 +272,8 @@ inline OperatorType GetOperatorFromToken(TokenType type)
 	return Op_None;
 }
 
+internal ASTNode* ParseExpression(Parser* parser);
+
 internal ASTNode* ParsePrimary(Parser* parser)
 {
 	ASTNode* result = 0;	
@@ -257,9 +293,63 @@ internal ASTNode* ParsePrimary(Parser* parser)
 	}
 	else if(token.Type == Token_Identifier)
 	{
-		AdvanceToken(parser);
-		result = CreateASTNode(parser->Arena, Node_Lookup);
-		result->Value = token;
+		Token op = PeekToken(parser, 1);
+		switch(op.Type)
+		{
+			case(Token_OpenParen):
+			{
+				AdvanceToken(parser, 2);
+				Token func_name = token;
+
+				ASTNode* first = 0;
+				ASTNode* last = 0;
+				u32 param_count;
+				
+				token = PeekToken(parser);
+				if(token.Type != Token_CloseParen && token.Type != Token_EOF)
+				{
+					for(;;)
+					{
+						ASTNode* curr = ParseExpression(parser);
+					
+						if(first)
+						{
+							last->Next = curr;
+							last = curr;
+						}
+						else
+						{
+							first = last = curr;
+						}
+						param_count++;
+						
+						token = PeekToken(parser);
+						if(token.Type == Token_CloseParen ||
+						   token.Type == Token_EOF)
+						{
+							break;
+						}
+
+						MatchToken(parser, Token_Comma);
+					}
+				}
+				MatchToken(parser, Token_CloseParen);
+
+				result = CreateASTNode(parser->Arena, Node_FunctionCall);
+				result->FCall.Name = func_name;
+				result->FCall.Params = first;
+				result->FCall.ParamCount = param_count;
+				
+				
+			}break;
+
+			default:
+			{
+				AdvanceToken(parser);
+				result = CreateASTNode(parser->Arena, Node_Lookup);
+				result->Value = token;
+			}break;
+		}
 	}
 	else
 	{
@@ -343,6 +433,49 @@ internal TypeDef* ParseType(Parser* parser)
 	return result;
 }
 
+internal FunctionArgument* ParseFunctionArguments(Parser* parser)
+{
+	FunctionArgument* result = 0;
+	FunctionArgument* last = 0;
+	MatchToken(parser, Token_OpenParen);
+
+	Token current = PeekToken(parser);
+	if(current.Type != Token_CloseParen)
+	{		
+		for(;;)
+		{			
+			Token ident = MatchToken(parser, Token_Identifier);
+			MatchToken(parser, Token_Colon);
+			TypeDef* type = ParseType(parser);
+		
+			FunctionArgument* arg = PushStruct(parser->Arena, FunctionArgument);
+			arg->Ident = ident;
+			arg->Type = type;
+
+			if(result)
+			{
+				last->Next = arg;
+				last = arg;
+			}
+			else
+			{
+				result = last = arg;			
+			}
+
+			current = PeekToken(parser);
+			if(current.Type == ')' || current.Type == Token_EOF)
+			{
+				break;
+			}
+
+			MatchToken(parser, Token_Comma);
+		}
+	}	
+	MatchToken(parser, Token_CloseParen);
+	return result;
+}
+
+
 internal ASTNode* ParseStatement(Parser* parser)
 {
 	ASTNode* result;
@@ -367,6 +500,45 @@ internal ASTNode* ParseStatement(Parser* parser)
 					result->VDecl.Type  = type;
 				}break;
 
+				case(Token_ColonColon):
+				{
+					AdvanceToken(parser, 2);
+					switch(PeekToken(parser).Type)
+					{
+						case('('):
+						{
+							// NOTE(afb) :: Function Prototype
+							FunctionArgument* args =
+								ParseFunctionArguments(parser);
+
+							TypeDef* return_type = 0;
+							if(PeekToken(parser).Type == Token_OpenBrace)
+							{
+								return_type = ParseType(parser);
+							}
+
+							if(PeekToken(parser).Type != Token_OpenBrace)
+							{
+								LogPanic(0, "Expected '{' for function definition");
+							}
+							ASTNode* body = ParseStatement(parser);
+							
+							result = CreateASTNode(parser->Arena, Node_Function);
+							result->Func.Name = current_token;
+							result->Func.Args = args;
+							result->Func.ReturnType = return_type;
+							result->Func.Body  = body;
+						}break;
+
+						default:
+						{
+							LogPanic(0, "Unhandled constant declarartion");
+						}break;
+					}
+					// TODO(afb) :: Ensure type is valid
+					// MatchToken(parser, Token_SemiColon);
+				}break;
+
 				case(Token_Equal):
 				{
 					AdvanceToken(parser, 2);
@@ -385,6 +557,31 @@ internal ASTNode* ParseStatement(Parser* parser)
 				}break;
 			}
 			
+		}break;
+		
+		case(Token_OpenBrace):
+		{
+			AdvanceToken(parser);
+
+			ASTNode* first = 0;
+			ASTNode* last = 0;
+			while(PeekToken(parser).Type != '}')
+			{
+				ASTNode* node = ParseStatement(parser);
+				if(first)
+				{
+					last->Next = node;
+					last = node;
+				}
+				else
+				{
+					first = last = node;
+				}
+			}
+			AdvanceToken(parser);
+
+			result = CreateASTNode(parser->Arena, Node_Block);
+			result->Block.Stmts = first;
 		}break;
 		
 		case(Token_Print):

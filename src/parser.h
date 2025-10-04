@@ -16,12 +16,18 @@ enum TokenType
 	Token_Equal = '=',
 	Token_OpenBracket = '[',
 	Token_CloseBracket = ']',
+	Token_Comma = ',',
 
+	Token_OpenBrace = '{',
+	Token_CloseBrace = '}',
+	
 	Token_EOF = '\0',
-	Token_Invalid = 404,
-
+	Token_Invalid = 404,	
+	
 	Token_IntegerLiteral = 300,
 
+	Token_ColonColon,
+	
 	Token_Identifier,
 	Token_Print,
 	Token_Int,
@@ -63,6 +69,9 @@ enum NodeType
 	Node_Lookup,
 	Node_VariableDeclaration,
 	Node_Assignment,
+	Node_Function,
+	Node_FunctionCall,
+	Node_Block,
 	Node_Print,
 };
 
@@ -106,11 +115,39 @@ struct BinaryNode
 	ASTNode* Right;
 };
 
+struct FunctionArgument
+{
+	Token Ident;
+	TypeDef* Type;
+	TypeIndex ArgType;
+	FunctionArgument* Next;
+};
+
+struct FunctionNode
+{
+	Token Name;
+	FunctionArgument* Args;
+	ASTNode* Body;
+	TypeDef* ReturnType;
+};
+
+struct FunctionCallNode
+{
+	Token Name;
+	ASTNode* Params;
+	u32 ParamCount;
+};
+
+struct BlockNode
+{
+	ASTNode* Stmts;
+};
 
 struct ASTNode
 {
 	NodeType Type;
 	TypeIndex EvalType;
+	u64 StackSize;
 	
 	union
 	{
@@ -119,6 +156,9 @@ struct ASTNode
 		BinaryNode Binary;
 		VarAssignment Assignment;
 		VarDeclaration VDecl;
+		FunctionNode Func;
+		FunctionCallNode FCall;
+		BlockNode Block;
 	};
 
 	ASTNode* Next;

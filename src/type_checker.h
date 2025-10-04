@@ -47,12 +47,14 @@ struct Symbol
 	TypeIndex Type;
 	String8 Name;
 	Symbol* Next;
+	b32 IsConstant;
 };
 
 struct SymbolTable
 {
 	SymbolTable* Parent;
 	Symbol* Symbols;
+	u32 SymbolCount;
 };
 
 struct TypeChecker

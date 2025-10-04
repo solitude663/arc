@@ -33,15 +33,24 @@ internal TypeIndex ResolveType(TypeChecker* tc, TypeDef* type)
 			Assert(tc->TypeCount < TYPE_CAPACITY);
 			
 			TypeIndex base = ResolveType(tc, type->Base);
+			for(u64 i = 0; i < tc->TypeCount; i++)
+			{
+				if(tc->Types[i].Type == Type_Pointer &&
+				   tc->Types[i].Pointer.Base == base)
+				{
+					result = i;
+					return result;
+				}
+			}
+			
 			TypeIndex index = tc->TypeCount++;
-
 			TypeInfo* type_info = &tc->Types[index];
 			type_info->Type = Type_Pointer;
 			type_info->Size = 8;
 			type_info->Pointer.Base = base;
 			result = index;
 		}break;
-
+		
 	}
 
 	return result;
@@ -54,7 +63,8 @@ internal b32 TypesAreCompatible(TypeIndex t1, TypeIndex t2)
 	return result;
 }
 
-internal Symbol* GetSymbol(SymbolTable* sym_table, const String8& name, b32 check_parent = true)
+internal Symbol* GetSymbol(SymbolTable* sym_table, const String8& name,
+						   b32 check_parent = true)
 {
 	Assert(sym_table);
 	Symbol* result = 0;
@@ -69,7 +79,7 @@ internal Symbol* GetSymbol(SymbolTable* sym_table, const String8& name, b32 chec
 
 	if(check_parent && (result == 0) && sym_table->Parent)
 	{
-		GetSymbol(sym_table->Parent, name, check_parent);
+		result = GetSymbol(sym_table->Parent, name);
 	}
 	return result;
 }
@@ -82,6 +92,7 @@ internal void AddSymbol(M_Arena* arena, SymbolTable* sym_table,
 	sym->Name = ident;
 	sym->Next = sym_table->Symbols;
 	sym_table->Symbols = sym;
+	sym_table->SymbolCount++;
 }
 
 internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* node)
@@ -95,6 +106,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			result = GetTypeIndex(tc, Type_Int);
 			Assert(result > -1);
 			
+			// node->StackSize = tc->Types[result].Size;
 			node->EvalType = result;
 		}break;
 
@@ -103,6 +115,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			result = GetTypeIndex(tc, Type_Bool);
 			Assert(result > -1);
 			
+			// node->StackSize = tc->Types[result].Size;
 			node->EvalType = result;
 		}break;
 
@@ -111,6 +124,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			TypeIndex t1 = CheckNode(tc, sym_table, node->Binary.Left);
 			TypeIndex t2 = CheckNode(tc, sym_table, node->Binary.Right);
 
+			node->StackSize = 0;
 			switch(node->Binary.Operator)
 			{
 				case(Op_Addition):
@@ -159,6 +173,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			TypeIndex type = ResolveType(tc, node->VDecl.Type);
 			AddSymbol(tc->Arena, sym_table, ident, type);
 			result = GetTypeIndex(tc, Type_Void);
+			node->StackSize = tc->Types[result].Size;
 		}break;
 
 		case(Node_Assignment):
@@ -172,6 +187,42 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			result = GetTypeIndex(tc, Type_Void);
 		}break;
 
+		case(Node_Block):
+		{
+			SymbolTable* table = PushStructZero(tc->Arena, SymbolTable);
+			table->Parent = sym_table;
+
+			for(ASTNode* n = node->Block.Stmts; n != 0; n = n->Next)
+			{
+				CheckNode(tc, table, n);
+				node->StackSize += n->StackSize;
+			}
+
+			result = GetTypeIndex(tc, Type_Void);			
+		}break;
+
+		case(Node_Function):
+		{
+			SymbolTable* table = PushStructZero(tc->Arena, SymbolTable);
+			table->Parent = sym_table;
+
+			for(FunctionArgument* n = node->Func.Args; n != 0; n = n->Next)
+			{
+				TypeIndex type = ResolveType(tc, n->Type);
+				// node->StackSize += tc->Types[type].Size;
+				AddSymbol(tc->Arena, table, n->Ident.Lexeme, type);
+			}
+
+			CheckNode(tc, table, node->Func.Body);
+
+			result = GetTypeIndex(tc, Type_Void);			
+		}break;
+
+		case(Node_FunctionCall):
+		{
+			LogPanic(0, "Unhandled func call");
+		}break;
+		
 		case(Node_Print):
 		{
 			TypeIndex index = CheckNode(tc, sym_table, node->Print.Expression);
@@ -202,6 +253,8 @@ internal void TypeCheck(TypeChecker* tc, ASTNode* tree)
 	{
 		CheckNode(tc, global_sym_table, node);
 	}
+
+	LogInfoF(0, "Type Count %ul", tc->TypeCount);
 }
 
 internal void TypeCheckerInit(TypeChecker* tc)
@@ -218,10 +271,6 @@ internal void TypeCheckerInit(TypeChecker* tc)
 	
 	tc->Types[2].Type = Type_Bool;
 	tc->Types[2].Size = 1;
-	tc->TypeCount++;
-
-	tc->Types[3].Type = Type_Pointer;
-	tc->Types[3].Size = 8;
 	tc->TypeCount++;
 
 	ArenaFree(tc->Arena);

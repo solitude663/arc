@@ -19,7 +19,7 @@ internal void FreeRegister(CodeGenerator* cg, i32 reg)
 	cg->Registers[reg] = 0;
 }
 
-internal i32 GenerateNode(CodeGenerator* cg, ASTNode* node)
+internal i32 GenerateNode(CodeGenerator* cg, ASTNode* node, b8 is_local = false)
 {
 	i32 result = 0;
 	switch(node->Type)
@@ -112,6 +112,39 @@ internal i32 GenerateNode(CodeGenerator* cg, ASTNode* node)
 			}
 		}break;
 
+		case(Node_Function):
+		{
+#define AlignForward(x, align) (((x) + (align) - 1) & ~((align) - 1))
+
+			if(!(node->Func.Name.Lexeme == "main"))
+			{				
+				i32 alloc_amount = AlignForward(node->StackSize, 16);
+				Str8ListPushF(cg->Arena, cg->CodeBuilder,
+							  "%S:\n"
+							  "\tpush rbp\n"
+							  "\tmov rbp, rsp\n"
+							  "\tsub rsp, %d",
+							  node->Func.Name.Lexeme, alloc_amount);
+			
+				Str8ListPushF(cg->Arena, cg->CodeBuilder,
+							  "\tadd rsp, %d\n"
+							  "\tpop rbp\n"
+							  "\tret",
+							  alloc_amount);
+			}
+			else
+			{
+				Str8ListPushF(cg->Arena, cg->CodeBuilder,
+							  "main:\n"
+							  "\tsub rsp, 16\n\n"
+							  "\tmov rax, 60 ; sys_exit\n"
+							  "\tmov rdi, 0\n"
+							  "\tsyscall\n",
+							  node->Func.Name.Lexeme);
+
+			}
+		}break;
+		
 		case(Node_Print):
 		{
 			i32 reg = GenerateNode(cg, node->Print.Expression);
@@ -124,10 +157,10 @@ internal i32 GenerateNode(CodeGenerator* cg, ASTNode* node)
 						  RegisterNames[reg]);
 			FreeRegister(cg, reg);
 		}break;
-		
+
 		default:
 		{
-			LogPanic(0, "Code Generation: Unknown node type");
+			LogPanicF(0, "Code Generation: Unknown node type %d", node->Type);
 		};
 	}
 	return result;
@@ -151,17 +184,14 @@ internal String8 GenerateAssembly(M_Arena* arena, ASTNode* program)
 				 "CPU X64\n\n"
 				 "section .text\n"
 				 "\textern printf\n"
-				 "\tglobal main\n"
-				 "main:");
+				 "\tglobal main");/*\n"
+								   "main:");*/
 	for(ASTNode* node = program; node != 0; node = node->Next)
 	{
 		GenerateNode(&cg, node);
 	}
 
 	Str8ListPush(arena, cg.CodeBuilder,
-				 "\tmov rax, 60 ; sys_exit\n"
-				 "\tmov rdi, 0\n"
-				 "\tsyscall\n"
 				 "\nsection .data\n"
 				 "\tint_format db \"%d\", 10, 0");
 
