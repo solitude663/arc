@@ -95,6 +95,22 @@ internal void AddSymbol(M_Arena* arena, SymbolTable* sym_table,
 	sym_table->SymbolCount++;
 }
 
+internal FunctionType* GetFunction(TypeChecker* tc, const String8& function_name)
+{
+	FunctionType* result = 0;
+
+	for(u32 i = 0; i < tc->FunctionCount; i++)
+	{
+		if(tc->Functions[i].Name == function_name)
+		{
+			result = &tc->Functions[i];
+			break;
+		}
+	}
+	
+	return result;
+}
+
 internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* node)
 {
 	TypeIndex result = -1;
@@ -169,6 +185,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			{
 				LogPanicF(0, "Error: Redefinition of variable %S in scope", ident);
 			}
+
 			// TODO(afb) :: Handle multiple types
 			TypeIndex type = ResolveType(tc, node->VDecl.Type);
 			AddSymbol(tc->Arena, sym_table, ident, type);
@@ -206,21 +223,56 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			SymbolTable* table = PushStructZero(tc->Arena, SymbolTable);
 			table->Parent = sym_table;
 
-			for(FunctionArgument* n = node->Func.Args; n != 0; n = n->Next)
+			FunctionType func = {0};
+			if(node->Func.ArgCount)
+			{
+				func.ArgNames = PushArray(tc->Arena, String8, node->Func.ArgCount);
+				func.ArgTypes = PushArray(tc->Arena, TypeIndex, node->Func.ArgCount);
+				func.ArgCount = node->Func.ArgCount;
+			}
+
+			u32 index = 0;
+			for(FunctionArgument* n = node->Func.Args;
+				n != 0;
+				n = n->Next)
 			{
 				TypeIndex type = ResolveType(tc, n->Type);
+				func.ArgNames[index] = n->Ident.Lexeme;
+				func.ArgTypes[index] = type;
+				index++;
+				
 				// node->StackSize += tc->Types[type].Size;
 				AddSymbol(tc->Arena, table, n->Ident.Lexeme, type);
 			}
 
 			CheckNode(tc, table, node->Func.Body);
 
-			result = GetTypeIndex(tc, Type_Void);			
+			TypeIndex return_type;
+			if(node->Func.ReturnType)
+			{
+				return_type = ResolveType(tc, node->Func.ReturnType);
+			}
+			else
+			{
+				return_type = GetTypeIndex(tc, Type_Void);
+			}
+
+			func.Name = node->Func.Name.Lexeme;
+			func.ReturnType = return_type;
+			tc->Functions[tc->FunctionCount++] = func;
+			
+			result = return_type;
 		}break;
 
 		case(Node_FunctionCall):
 		{
-			LogPanic(0, "Unhandled func call");
+			FunctionCallNode* func = &node->FCall;
+			FunctionType* func_type = GetFunction(tc, func->Name.Lexeme);
+			if(func_type == 0)
+			{
+				LogPanicF(0, "Function '%S' does not exist", func->Name.Lexeme);
+			}
+			
 		}break;
 		
 		case(Node_Print):
@@ -247,7 +299,8 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 
 internal void TypeCheck(TypeChecker* tc, ASTNode* tree)
 {
-	SymbolTable* global_sym_table = PushStructZero(tc->Arena, SymbolTable);
+	SymbolTable* global_sym_table =
+		PushStructZero(tc->Arena, SymbolTable);
 	
 	for(ASTNode* node = tree; node != 0; node = node->Next)
 	{

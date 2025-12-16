@@ -6,15 +6,16 @@ typedef i64 TypeIndex;
 enum TypeKind
 {
 	// Static types
-	Type_Int,
-	Type_Bool,
 	Type_Void,
+	Type_Bool,
+	Type_Int,
 	Type_Float,
 
 	// Dynamic types
 	Type_Pointer,
 	Type_Array,
 	Type_Struct,
+	Type_Function,
 };
 
 struct PointerType
@@ -30,6 +31,17 @@ struct StructType
 	u64 FieldCount;
 };
 
+struct FunctionType
+{
+	String8 Name;
+	TypeIndex ReturnType;
+
+	String8* ArgNames;
+	TypeIndex* ArgTypes;
+	u32 ArgCount;
+
+};
+
 struct TypeInfo
 {
 	TypeKind Type;
@@ -41,13 +53,13 @@ struct TypeInfo
 	};
 };
 
-struct Symbol;
+// struct Symbol;
 struct Symbol
 {
 	TypeIndex Type;
 	String8 Name;
 	Symbol* Next;
-	b32 IsConstant;
+	// b32 IsConstant;
 };
 
 struct SymbolTable
@@ -60,9 +72,14 @@ struct SymbolTable
 struct TypeChecker
 {
 	M_Arena* Arena;
+
 #define TYPE_CAPACITY 1024
 	TypeInfo Types[TYPE_CAPACITY];
-	u64 TypeCount;
+	u32 TypeCount;
+
+#define FUNCTION_CAPACITY 1024
+	FunctionType Functions[FUNCTION_CAPACITY];
+	u32 FunctionCount;
 };
 
 #endif // Header guard

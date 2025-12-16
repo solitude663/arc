@@ -14,6 +14,19 @@ inline u8 CurrentChar(Parser* parser)
 	return result;
 }
 
+inline void AdvanceChar(Parser* parser)
+{
+	u8 current = CurrentChar(parser);
+	parser->CurrentOffset++;
+	if(current != '\r' && current != '\n') parser->ColumnNumber++;
+	else
+	{
+		parser->RowNumber++;
+		parser->ColumnNumber = 0;
+	}
+	
+}
+
 internal void EatWhitespace(Parser* parser)
 {
 	u8 current = CurrentChar(parser);
@@ -22,7 +35,7 @@ internal void EatWhitespace(Parser* parser)
 		   (current == '\r') ||
 		   (current == '\t')))
 	{
-		parser->CurrentOffset++;
+		AdvanceChar(parser);
 		current = CurrentChar(parser);
 	}
 }
@@ -41,23 +54,23 @@ internal TokenType GetKeywordOrIdentifier(const String8& lexeme)
 
 internal const char* GetTokenTypeString(TokenType type)
 {
-	if(type == '\0') return "EOF";
-	if(type == '(') return "Open Paren";
-	if(type == ')') return "Close Paren";
+	if(type == '\0') return "<eof>";
+	if(type == '(') return "open-paren";
+	if(type == ')') return "close-paren";
 	if(type == '+') return "Plus";
-	if(type == '-') return "Minus";
-	if(type == '*') return "Star";
-	if(type == '/') return "Slash";
-	if(type == ':') return "Colon";
-	if(type == ';') return "Semi Colon";
-	if(type == '=') return "Equal";
-
-	if(type == Token_Invalid) return "<Invalid>";
+	if(type == '-') return "minus";
+	if(type == '*') return "star";
+	if(type == '/') return "slash";
+	if(type == ':') return "colon";
+	if(type == ';') return "semi-colon";
+	if(type == '=') return "equal";
+	
+	if(type == Token_Invalid) return "<invalid>";
 	if(type == Token_Identifier) return "<identifier>";
 	if(type == Token_IntegerLiteral) return "<int>";
 	if(type == Token_Print) return "Print";
-	if(type == Token_Invalid) return "Token_Invalid";
-
+	if(type == Token_Invalid) return "token_invalid";
+	
 	return "(null)";
 }
 
@@ -69,13 +82,19 @@ internal Token MatchType2(Parser* parser, TokenType t1, TokenType t2, u8 ch)
 	{
 		result.Type = t2;
 		result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 2);
-		parser->CurrentOffset += 2;
+
+		// TODO(afb) :: Change to be able to advance multiple times
+		AdvanceChar(parser);
+		AdvanceChar(parser);
+		// parser->CurrentOffset += 2;
 	}
 	else
 	{
 		result.Type = t1;
 		result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
-		parser->CurrentOffset++;
+
+		AdvanceChar(parser);
+		// parser->CurrentOffset++;
 	}
 	return result;
 }
@@ -84,6 +103,9 @@ internal Token ParseToken(Parser* parser)
 {
 	Token result = {};	
 	EatWhitespace(parser);
+
+	int row_number = parser->RowNumber;
+	int col_number = parser->ColumnNumber;
 
 	u8 current = CurrentChar(parser);
 	switch(current)
@@ -104,7 +126,7 @@ internal Token ParseToken(Parser* parser)
 		{			
 			result.Type = (TokenType)current;
 			result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
-			parser->CurrentOffset++;
+			AdvanceChar(parser);
 		}break;		
 
 		case(':'):
@@ -116,7 +138,8 @@ internal Token ParseToken(Parser* parser)
 		{
 			result.Type = Token_EOF;
 			result.Lexeme = Str8CLit("EOF");
-			parser->CurrentOffset++;
+			AdvanceChar(parser);
+			// parser->CurrentOffset++;
 		}break;
 		
 		default:
@@ -126,7 +149,8 @@ internal Token ParseToken(Parser* parser)
 				u64 start = parser->CurrentOffset;
 				while(IsDigit(current))
 				{
-					parser->CurrentOffset++;
+					AdvanceChar(parser);
+					// parser->CurrentOffset++;
 					current = CurrentChar(parser);
 				}
 				u64 end = parser->CurrentOffset;
@@ -139,7 +163,8 @@ internal Token ParseToken(Parser* parser)
 				u64 start = parser->CurrentOffset;				
 				while((IsDigit(current) || IsAlpha(current) || current == '_'))
 				{
-					parser->CurrentOffset++;
+					AdvanceChar(parser);
+					// parser->CurrentOffset++;
 					current = CurrentChar(parser);
 				}				
 				u64 end = parser->CurrentOffset;
@@ -151,10 +176,15 @@ internal Token ParseToken(Parser* parser)
 			{
 				result.Type = Token_Invalid;
 				result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
-				parser->CurrentOffset++;
+				AdvanceChar(parser);
+				// parser->CurrentOffset++;
 			}
 		}
 	}
+
+	// TODO(afb) :: Handle comments;
+	result.RowNumber = row_number;
+	result.ColumnNumber = col_number;
 	
 	return result;
 }
@@ -217,9 +247,10 @@ internal Token MatchToken(Parser* parser, TokenType type)
 	Token result = PeekToken(parser, 0);
 	if(result.Type != type)
 	{
+		ParserError(parser, result, "Expected (%s) but recieved %.*s", GetTokenTypeString(type), Str8Print(result.Lexeme));
+		
 		// TODO(afb) :: Report error
-		LogErrorF(0, "Match error: Expected %s but recieved %s",
-				  GetTokenTypeString(type), GetTokenTypeString(result.Type));
+		// LogErrorF(0, "Match error: Expected %s but recieved %s", GetTokenTypeString(type), GetTokenTypeString(result.Type));
 		result.Type = type;
 	}
 	AdvanceToken(parser);
@@ -353,8 +384,9 @@ internal ASTNode* ParsePrimary(Parser* parser)
 	}
 	else
 	{
-		LogPanicF(0, "Error: Unhandled token <%s> in ParsePrimary",
-				  GetTokenTypeString(token.Type));
+		ParserError(parser, token, "Expected a literal(identifier|number) but reciecved %s(%.*s).",
+					GetTokenTypeString(token.Type), Str8Print(token.Lexeme));
+
 	}
 
 	return result;
@@ -395,7 +427,7 @@ internal ASTNode* ParseExpression(Parser* parser)
 	return ParseBinaryExpression(parser);
 }
 
-internal TypeDef* ParseType(Parser* parser)
+internal TypeDef* ParseType(Parser* parser, bool log_error = false)
 {
 	TypeDef* result = 0;
 	
@@ -430,18 +462,28 @@ internal TypeDef* ParseType(Parser* parser)
 		result->Base = ParseType(parser);		
 	}
 
+	if(log_error && !result)
+	{
+		Token error_tok = PeekToken(parser);
+		ParserError(parser, tk, "Error while parsing type. Recieved %.*s",
+					Str8Print(tk.Lexeme));
+		AdvanceToken(parser);
+	}
+
 	return result;
 }
 
-internal FunctionArgument* ParseFunctionArguments(Parser* parser)
+internal FunctionArgument* ParseFunctionArguments(Parser* parser,
+												  u32* argument_count)
 {
 	FunctionArgument* result = 0;
 	FunctionArgument* last = 0;
 	MatchToken(parser, Token_OpenParen);
 
+	u32 arg_count = 0;
 	Token current = PeekToken(parser);
 	if(current.Type != Token_CloseParen)
-	{		
+	{
 		for(;;)
 		{			
 			Token ident = MatchToken(parser, Token_Identifier);
@@ -452,6 +494,8 @@ internal FunctionArgument* ParseFunctionArguments(Parser* parser)
 			arg->Ident = ident;
 			arg->Type = type;
 
+			arg_count++;
+			
 			if(result)
 			{
 				last->Next = arg;
@@ -472,6 +516,8 @@ internal FunctionArgument* ParseFunctionArguments(Parser* parser)
 		}
 	}	
 	MatchToken(parser, Token_CloseParen);
+	*argument_count = arg_count;
+	// result->ArgCount = arg_count;
 	return result;
 }
 
@@ -491,8 +537,7 @@ internal ASTNode* ParseStatement(Parser* parser)
 				case(Token_Colon):
 				{
 					AdvanceToken(parser, 2);
-					TypeDef* type = ParseType(parser);
-					// TODO(afb) :: Ensure type is valid
+					TypeDef* type = ParseType(parser, true);					
 					MatchToken(parser, Token_SemiColon);
 					
 					result = CreateASTNode(parser->Arena, Node_VariableDeclaration);
@@ -508,11 +553,12 @@ internal ASTNode* ParseStatement(Parser* parser)
 						case('('):
 						{
 							// NOTE(afb) :: Function Prototype
+							u32 arg_count = 0;
 							FunctionArgument* args =
-								ParseFunctionArguments(parser);
+								ParseFunctionArguments(parser, &arg_count);
 
 							TypeDef* return_type = 0;
-							if(PeekToken(parser).Type == Token_OpenBrace)
+							if(PeekToken(parser).Type != Token_OpenBrace)
 							{
 								return_type = ParseType(parser);
 							}
@@ -528,6 +574,7 @@ internal ASTNode* ParseStatement(Parser* parser)
 							result->Func.Args = args;
 							result->Func.ReturnType = return_type;
 							result->Func.Body  = body;
+							result->Func.ArgCount = arg_count;
 						}break;
 
 						default:

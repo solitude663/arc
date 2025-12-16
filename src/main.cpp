@@ -1,6 +1,8 @@
 #include <base_inc.h>
 #include <base_inc.cpp>
 
+#include "./logger.cpp"
+
 #include "./parser.h"
 #include "./parser.cpp"
 
@@ -9,6 +11,7 @@
 
 #include "./type_checker.h"
 #include "./type_checker.cpp"
+
 
 internal void MainEntry(i32 argc, char** argv)
 {
@@ -28,13 +31,18 @@ internal void MainEntry(i32 argc, char** argv)
 	parser.Data = file_contents;
 	ASTNode* program = Parse(&parser);
 
+	if(parser.ErrorCount)
+	{
+		LogPanicF(0, "Parsing failed with %d errors", parser.ErrorCount);
+	}
 	// CodeGenerator code_gen = {0};
 	// code_gen.Arena = arena;
 
+#if 0
 	TypeChecker type_checker = {};
 	TypeCheckerInit(&type_checker);
 	TypeCheck(&type_checker, program);
-
+   
 	String8 output = GenerateAssembly(arena, program);
 	String8 output_filename = "./out.nasm";
 	OS_Handle handle = OS_FileOpen(output_filename,
@@ -47,6 +55,7 @@ internal void MainEntry(i32 argc, char** argv)
 		OS_FileClose(handle);
 		LogInfoF(0, "Output %S", output_filename);
 	}
+#endif
 }
 
 int main(int argc, char** argv)

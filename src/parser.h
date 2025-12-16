@@ -44,6 +44,10 @@ struct Token
 {
 	TokenType Type;
 	String8 Lexeme;
+
+	u32 RowNumber;
+	u32 ColumnNumber;
+	String8 FilePath; // TODO(afb) :: Should be a index to a file
 };
 
 struct Parser
@@ -53,6 +57,10 @@ struct Parser
 
 	u64 CurrentOffset;
 
+	u32 ErrorCount;
+	u32 RowNumber;
+	u32 ColumnNumber;
+	
 	Token TokenRingBuffer[TOKEN_RING_BUFFER_SIZE];
 	u64 CurrentTokenIndex;
 	u64 LiveTokens;
@@ -126,9 +134,10 @@ struct FunctionArgument
 struct FunctionNode
 {
 	Token Name;
+	TypeDef* ReturnType;
 	FunctionArgument* Args;
 	ASTNode* Body;
-	TypeDef* ReturnType;
+	u32 ArgCount;
 };
 
 struct FunctionCallNode
