@@ -54,7 +54,8 @@ struct Parser
 {
 	M_Arena* Arena;
 	String8 Data;
-
+	String8 FileToCompile;
+	
 	u64 CurrentOffset;
 
 	u32 ErrorCount;

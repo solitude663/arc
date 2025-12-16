@@ -23,12 +23,16 @@ internal void MainEntry(i32 argc, char** argv)
 	M_Arena* arena = ArenaAlloc(MB(128));
 	String8 file_to_compile = Str8C(argv[1]);
 	String8 file_contents = OS_FileReadAll(arena, file_to_compile);
-	
-	printf("File: %.*s\n%.*s\n", Str8Print(file_to_compile), Str8Print(file_contents));
+
+	String8 working_directory = GetWorkingDirectory(arena);
+	String8 target_full_path = OS_PathConcat(arena, working_directory, file_to_compile);
+
+	printf("File: %.*s\n%.*s\n", Str8Print(target_full_path), Str8Print(file_contents));
 
 	Parser parser = {0};
 	parser.Arena = arena;
 	parser.Data = file_contents;
+	parser.FileToCompile = target_full_path;
 	ASTNode* program = Parse(&parser);
 
 	if(parser.ErrorCount)

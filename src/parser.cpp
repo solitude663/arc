@@ -427,7 +427,7 @@ internal ASTNode* ParseExpression(Parser* parser)
 	return ParseBinaryExpression(parser);
 }
 
-internal TypeDef* ParseType(Parser* parser, bool log_error = false)
+internal TypeDef* ParseType(Parser* parser, bool log_error = true)
 {
 	TypeDef* result = 0;
 	
@@ -537,7 +537,7 @@ internal ASTNode* ParseStatement(Parser* parser)
 				case(Token_Colon):
 				{
 					AdvanceToken(parser, 2);
-					TypeDef* type = ParseType(parser, true);					
+					TypeDef* type = ParseType(parser);
 					MatchToken(parser, Token_SemiColon);
 					
 					result = CreateASTNode(parser->Arena, Node_VariableDeclaration);
