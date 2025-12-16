@@ -552,6 +552,13 @@ internal ASTNode* ParseStatement(Parser* parser)
 					{
 						case('('):
 						{
+							if(parser->InFunction)
+							{
+								ParserError(parser, PeekToken(parser), "Can NOT create a function inside another function");
+							}
+							
+							parser->InFunction = true;
+							
 							// NOTE(afb) :: Function Prototype
 							u32 arg_count = 0;
 							FunctionArgument* args =
@@ -575,6 +582,8 @@ internal ASTNode* ParseStatement(Parser* parser)
 							result->Func.ReturnType = return_type;
 							result->Func.Body  = body;
 							result->Func.ArgCount = arg_count;
+
+							parser->InFunction = false;
 						}break;
 
 						default:
@@ -608,6 +617,11 @@ internal ASTNode* ParseStatement(Parser* parser)
 		
 		case(Token_OpenBrace):
 		{
+			if(!parser->InFunction)
+			{
+				ParserError(parser, PeekToken(parser), "A floating block can NOT exist outside a function");
+			}
+			
 			AdvanceToken(parser);
 
 			ASTNode* first = 0;
@@ -633,6 +647,7 @@ internal ASTNode* ParseStatement(Parser* parser)
 		
 		case(Token_Print):
 		{
+			// TODO(afb) :: Remove
 			AdvanceToken(parser);
 			MatchToken(parser, Token_OpenParen);
 			ASTNode* expr = ParseExpression(parser);
@@ -674,7 +689,7 @@ internal ASTNode* Parse(Parser* parser)
 		if(PeekToken(parser).Type == Token_EOF) break;
 #else
 		Token t = NextToken(parser);
-		LogInfoF(0, "Lexeme: %S of Type: %s", t.Lexeme, GetTokenTypeString(t));
+		LogInfoF(0, "Lexeme: %S of Type: %s", t.Lexeme, GetTokenTypeString(t.Type));
 		if(t.Type == Token_EOF)
 			break;
 #endif

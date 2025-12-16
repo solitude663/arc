@@ -65,6 +65,8 @@ struct Parser
 	Token TokenRingBuffer[TOKEN_RING_BUFFER_SIZE];
 	u64 CurrentTokenIndex;
 	u64 LiveTokens;
+
+	b8 InFunction;
 };
 
 struct ASTNode;
@@ -86,10 +88,10 @@ enum NodeType
 
 enum OperatorType
 {
-	Op_Addition,
-	Op_Subtraction,
-	Op_Multiplication,
-	Op_Division,
+	Op_Addition = '+',
+	Op_Subtraction = '-',
+	Op_Multiplication = '*',
+	Op_Division = '/',
 	Op_None,
 };
 
