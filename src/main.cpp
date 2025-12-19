@@ -6,11 +6,12 @@
 #include "./parser.h"
 #include "./parser.cpp"
 
-#include "./code_generator.h"
-#include "./code_generator.cpp"
+// #include "./code_generator.h"
+// #include "./code_generator.cpp"
 
-#include "./type_checker.h"
-#include "./type_checker.cpp"
+// #include "./type_checker.h"
+// #include "./type_checker.cpp"
+
 
 internal void PrintASTNode(ASTNode* node, i32 level);
 internal void PrintAST(ASTNode* node, i32 level);
@@ -29,6 +30,11 @@ internal void PrintASTNode(ASTNode* node, i32 level = 0)
 			printf("INT_LIT(%.*s)\n", Str8Print(node->Value.Lexeme));
 		}break;
 
+		case(Node_BoolLiteral):
+		{
+			printf("BOOL_LIT(%.*s)\n", Str8Print(node->Value.Lexeme));
+		}break;
+
 		case(Node_Binary):
 		{
 			// TODO(afb) :: ImplementOpTypeToString
@@ -41,22 +47,24 @@ internal void PrintASTNode(ASTNode* node, i32 level = 0)
 		{
 			printf("VAR_DECL(%.*s)\n", Str8Print(node->VDecl.Ident.Lexeme));
 		}break;
-
+		
 		case(Node_Function):
 		{
-			printf("FUNC_DECL(%.*s)\n", Str8Print(node->Func.Name.Lexeme));
+			printf("FUNC_DECL\n");
+			
+			PrintASTNode(node->Func.Prototype, level + 1);
 			PrintASTNode(node->Func.Body, level + 1);
-			/*
-			  TypeDef* ReturnType;
-			  FunctionArgument* Args;
-			  u32 ArgCount;
-			*/
 		}break;
 
+		case(Node_FunctionPrototype):
+		{
+			printf("PROTO(%.*s)\n", Str8Print(node->Proto.Name.Lexeme));
+		}break;
+		
 		case(Node_Block):
 		{
 			printf("SCOPE_START\n");
-			PrintAST(node->Block.Stmts, 0);
+			PrintAST(node->Block.Stmts, level + 1);
 			for(i32 i = 0; i < level; i++)
 			{
 				printf("   |");
@@ -68,6 +76,23 @@ internal void PrintASTNode(ASTNode* node, i32 level = 0)
 		{
 			printf("PRINT\n");
 			PrintASTNode(node->Print.Expression, level + 1);
+		}break;
+
+		case(Node_Assignment):
+		{
+			printf("VAR_ASSIGN(%.*s)\n", Str8Print(node->Assignment.Ident.Lexeme));
+			PrintASTNode(node->Assignment.Value, level + 1);
+		}break;
+
+		case(Node_Lookup):
+		{
+			printf("LOOKUP(%.*s)\n", Str8Print(node->Value.Lexeme));
+		}break;
+
+		case(Node_FunctionCall):
+		{
+			printf("CALL(%.*s)\n", Str8Print(node->Value.Lexeme));
+			PrintAST(node->FCall.Params, level + 1);
 		}break;
 		
 		default:
@@ -85,6 +110,13 @@ internal void PrintAST(ASTNode* node, i32 level = 0)
 	}
 }
 
+enum BuildMode
+{
+	Build_AST,
+	Build_TypedIR,
+	Build_Executable,
+	Build_None,	
+};
 
 internal void MainEntry(i32 argc, char** argv)
 {
@@ -93,6 +125,8 @@ internal void MainEntry(i32 argc, char** argv)
 		LogPanicF(0, "usage %s <file_to_compile>", argv[1]);
 	}
 
+	BuildMode build_mode = Build_AST;
+	
 	M_Arena* arena = ArenaAlloc(MB(128));
 	String8 file_to_compile = Str8C(argv[1]);
 	String8 file_contents = OS_FileReadAll(arena, file_to_compile);
@@ -100,16 +134,14 @@ internal void MainEntry(i32 argc, char** argv)
 	String8 working_directory = GetWorkingDirectory(arena);
 	String8 target_full_path = OS_PathConcat(arena, working_directory, file_to_compile);
 
-	printf("\n===== %.*s\n%.*s\n",
-		   Str8Print(target_full_path),
-		   Str8Print(file_contents));
+	printf("\n===== %.*s\n", Str8Print(target_full_path));
 
 	Parser parser = {0};
 	parser.Arena = arena;
 	parser.Data = file_contents;
 	parser.FileToCompile = target_full_path;
 	ASTNode* program = Parse(&parser);
-
+	
 	PrintAST(program);
 
 	if(parser.ErrorCount)
@@ -123,6 +155,7 @@ internal void MainEntry(i32 argc, char** argv)
 	TypeChecker type_checker = {};
 	TypeCheckerInit(&type_checker);
 	TypeCheck(&type_checker, program);
+	printf("===== Type checking complete. Found %u type(s)\n", type_checker.TypeCount);
    
 	String8 output = GenerateAssembly(arena, program);
 	String8 output_filename = "./out.nasm";

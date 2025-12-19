@@ -49,6 +49,7 @@ internal TokenType GetKeywordOrIdentifier(const String8& lexeme)
 	if(lexeme == "bool") result = Token_Bool;
 	if(lexeme == "true") result = Token_True;
 	if(lexeme == "false") result = Token_False;
+	if(lexeme == "extern") result = Token_Extern;
 	return result;
 }
 
@@ -69,7 +70,8 @@ internal const char* GetTokenTypeString(TokenType type)
 	if(type == Token_Identifier) return "<identifier>";
 	if(type == Token_IntegerLiteral) return "<int>";
 	if(type == Token_Print) return "Print";
-	if(type == Token_Invalid) return "token_invalid";
+	if(type == Token_Invalid) return "<invalid>";
+	if(type == Token_Extern) return "extern";
 	
 	return "(null)";
 }
@@ -438,7 +440,8 @@ internal TypeDef* ParseType(Parser* parser, bool log_error = true)
 		result = PushStructZero(parser->Arena, TypeDef);
 		result->Type = Type_Int;
 	}
-	if(tk.Type == Token_Bool)
+#if 0
+	else if(tk.Type == Token_Bool)
 	{
 		AdvanceToken(parser);
 		result = PushStructZero(parser->Arena, TypeDef);
@@ -461,7 +464,8 @@ internal TypeDef* ParseType(Parser* parser, bool log_error = true)
 		MatchToken(parser, Token_CloseBracket);
 		result->Base = ParseType(parser);		
 	}
-
+#endif
+	
 	if(log_error && !result)
 	{
 		Token error_tok = PeekToken(parser);
@@ -473,8 +477,133 @@ internal TypeDef* ParseType(Parser* parser, bool log_error = true)
 	return result;
 }
 
+internal ASTNode* ParseStatement(Parser* parser)
+{
+	ASTNode* result;
+	Token current_token = PeekToken(parser);
+	switch(current_token.Type)
+	{
+		case(Token_Identifier):
+		{
+			Token next_token = PeekToken(parser, 1);
+			
+			switch(next_token.Type)
+			{
+				case(Token_Colon):
+				{
+					AdvanceToken(parser, 2);
+					TypeDef* type = ParseType(parser);
+					MatchToken(parser, Token_SemiColon);
+					
+					result = CreateASTNode(parser->Arena, Node_VariableDeclaration);
+					result->VDecl.Ident = current_token;
+					result->VDecl.Type  = type;
+				}break;
+
+				case(Token_ColonColon):
+				{
+					// AdvanceToken(parser, 2);
+					// NOTE:TODO(afb) :: Constant declaration						{
+					LogPanic(0, "Unhandled constant declarartion");
+					
+					// TODO(afb) :: Ensure type is valid
+					// MatchToken(parser, Token_SemiColon);
+				}break;
+
+				case(Token_Equal):
+				{
+					AdvanceToken(parser, 2);
+					ASTNode* expr = ParseExpression(parser);
+					MatchToken(parser, Token_SemiColon);
+
+					result = CreateASTNode(parser->Arena, Node_Assignment);
+					result->Assignment.Ident = current_token;
+					result->Assignment.Value = expr;
+				}break;
+				
+				default:
+				{
+					result = ParseExpression(parser);
+					MatchToken(parser, Token_SemiColon);
+				}break;
+			}
+			
+		}break;
+		
+		case(Token_OpenBrace):
+		{
+			if(!parser->InFunction)
+			{
+				ParserError(parser, PeekToken(parser), "A floating block can NOT exist outside a function");
+			}			
+			AdvanceToken(parser);
+
+			ASTNode* first = 0;
+			ASTNode* last = 0;
+			while(PeekToken(parser).Type != '}')
+			{
+				ASTNode* node = ParseStatement(parser);
+				if(first)
+				{
+					last->Next = node;
+					last = node;
+				}
+				else
+				{
+					first = last = node;
+				}
+			}
+			MatchToken(parser, Token_CloseBrace);
+
+			result = CreateASTNode(parser->Arena, Node_Block);
+			result->Block.Stmts = first;
+		}break;
+		
+		case(Token_Print):
+		{
+			// TODO(afb) :: Remove
+			AdvanceToken(parser);
+			MatchToken(parser, Token_OpenParen);
+			ASTNode* expr = ParseExpression(parser);
+			MatchToken(parser, Token_CloseParen);
+			MatchToken(parser, Token_SemiColon);
+			
+			result = CreateASTNode(parser->Arena, Node_Print);
+			result->Print.Expression = expr;
+			
+		}break;
+		
+		default:
+		{
+			result = ParseExpression(parser);
+			MatchToken(parser, Token_SemiColon);
+		}
+	}
+	return result;
+}
+
+/*
+  1.
+  func :: () {
+  
+  }
+  
+  2.
+  func :: (a: int, b: int);
+
+  3.
+  import "file"
+
+  4.
+  extern func :: (a: int) int;
+
+  5. 
+  var :: 1;
+  var := 1;
+ */
+
 internal FunctionArgument* ParseFunctionArguments(Parser* parser,
-												  u32* argument_count)
+												  u32* result_arg_count)
 {
 	FunctionArgument* result = 0;
 	FunctionArgument* last = 0;
@@ -507,164 +636,92 @@ internal FunctionArgument* ParseFunctionArguments(Parser* parser,
 			}
 
 			current = PeekToken(parser);
-			if(current.Type == ')' || current.Type == Token_EOF)
+			if(current.Type == ',') //  || current.Type == Token_EOF)
 			{
-				break;
+				continue;
 			}
 
-			MatchToken(parser, Token_Comma);
+			break;
 		}
-	}	
+	}
+
 	MatchToken(parser, Token_CloseParen);
-	*argument_count = arg_count;
+
+	*result_arg_count = arg_count;
 	// result->ArgCount = arg_count;
 	return result;
 }
 
 
-internal ASTNode* ParseStatement(Parser* parser)
+internal ASTNode* ParseFunctionPrototype(Parser* parser)
 {
-	ASTNode* result;
+	ASTNode* result = 0;	
+	Token func_name = MatchToken(parser, Token_Identifier);
+	MatchToken(parser, Token_ColonColon);
+	
+	u32 arg_count = 0;
+	FunctionArgument* args = ParseFunctionArguments(parser, &arg_count);
+	
+	TypeDef* return_type = ParseType(parser, false);	
+							
+	result = CreateASTNode(parser->Arena, Node_FunctionPrototype);
+	result->Proto.Name = func_name;
+	result->Proto.Args = args;
+	result->Proto.ReturnType = return_type;
+	result->Proto.ArgCount = arg_count;
+	return result;
+}
+
+internal ASTNode* ParseTopLevelStatement(Parser* parser)
+{
+	ASTNode* result = 0;
+
 	Token current_token = PeekToken(parser);
-	switch(current_token.Type)
+	if((PeekToken(parser, 0).Type == Token_Identifier) &&
+	   (PeekToken(parser, 1).Type == Token_ColonColon) &&
+	   (PeekToken(parser, 2).Type == Token_OpenParen))
 	{
-		case(Token_Identifier):
-		{
-			Token next_token = PeekToken(parser, 1);
-			
-			switch(next_token.Type)
-			{
-				case(Token_Colon):
-				{
-					AdvanceToken(parser, 2);
-					TypeDef* type = ParseType(parser);
-					MatchToken(parser, Token_SemiColon);
-					
-					result = CreateASTNode(parser->Arena, Node_VariableDeclaration);
-					result->VDecl.Ident = current_token;
-					result->VDecl.Type  = type;
-				}break;
-
-				case(Token_ColonColon):
-				{
-					AdvanceToken(parser, 2);
-					switch(PeekToken(parser).Type)
-					{
-						case('('):
-						{
-							if(parser->InFunction)
-							{
-								ParserError(parser, PeekToken(parser), "Can NOT create a function inside another function");
-							}
-							
-							parser->InFunction = true;
-							
-							// NOTE(afb) :: Function Prototype
-							u32 arg_count = 0;
-							FunctionArgument* args =
-								ParseFunctionArguments(parser, &arg_count);
-
-							TypeDef* return_type = 0;
-							if(PeekToken(parser).Type != Token_OpenBrace)
-							{
-								return_type = ParseType(parser);
-							}
-
-							if(PeekToken(parser).Type != Token_OpenBrace)
-							{
-								LogPanic(0, "Expected '{' for function definition");
-							}
-							ASTNode* body = ParseStatement(parser);
-							
-							result = CreateASTNode(parser->Arena, Node_Function);
-							result->Func.Name = current_token;
-							result->Func.Args = args;
-							result->Func.ReturnType = return_type;
-							result->Func.Body  = body;
-							result->Func.ArgCount = arg_count;
-
-							parser->InFunction = false;
-						}break;
-
-						default:
-						{
-							LogPanic(0, "Unhandled constant declarartion");
-						}break;
-					}
-					// TODO(afb) :: Ensure type is valid
-					// MatchToken(parser, Token_SemiColon);
-				}break;
-
-				case(Token_Equal):
-				{
-					AdvanceToken(parser, 2);
-					ASTNode* expr = ParseExpression(parser);
-					MatchToken(parser, Token_SemiColon);
-
-					result = CreateASTNode(parser->Arena, Node_Assignment);
-					result->Assignment.Ident = current_token;
-					result->Assignment.Value = expr;
-				}break;
-				
-				default:
-				{
-					result = ParseExpression(parser);
-					MatchToken(parser, Token_SemiColon);
-				}break;
-			}
-			
-		}break;
+		b32 is_next_statement_a_function =
+			((PeekToken(parser, 3).Type == Token_CloseParen) ||
+			 (PeekToken(parser, 4).Type == Token_Colon));
 		
-		case(Token_OpenBrace):
+		if(is_next_statement_a_function)
 		{
-			if(!parser->InFunction)
+			if(parser->InFunction)
 			{
-				ParserError(parser, PeekToken(parser), "A floating block can NOT exist outside a function");
-			}
+				ParserError(parser, PeekToken(parser), "Can NOT create a function inside another function");
+			}							
+			parser->InFunction = true;
 			
-			AdvanceToken(parser);
-
-			ASTNode* first = 0;
-			ASTNode* last = 0;
-			while(PeekToken(parser).Type != '}')
+			// NOTE(afb) :: Function Prototype
+			ASTNode* protoype = ParseFunctionPrototype(parser);
+			if(PeekToken(parser).Type == Token_OpenBrace)
+			{									
+				ASTNode* body = ParseStatement(parser);
+				result = CreateASTNode(parser->Arena, Node_Function);
+				result->Func.Prototype = protoype;
+				result->Func.Body = body;
+			}
+			else
 			{
-				ASTNode* node = ParseStatement(parser);
-				if(first)
-				{
-					last->Next = node;
-					last = node;
-				}
-				else
-				{
-					first = last = node;
-				}
+				result = protoype;
 			}
-			AdvanceToken(parser);
-
-			result = CreateASTNode(parser->Arena, Node_Block);
-			result->Block.Stmts = first;
-		}break;
-		
-		case(Token_Print):
+								
+			parser->InFunction = false;
+		}
+		else
 		{
-			// TODO(afb) :: Remove
-			AdvanceToken(parser);
-			MatchToken(parser, Token_OpenParen);
-			ASTNode* expr = ParseExpression(parser);
-			MatchToken(parser, Token_CloseParen);
-			MatchToken(parser, Token_SemiColon);
-			
-			result = CreateASTNode(parser->Arena, Node_Print);
-			result->Print.Expression = expr;
-			
-		}break;
-		
-		default:
-		{
-			result = ParseExpression(parser);
-			MatchToken(parser, Token_SemiColon);
+			// NOTE(afb) :: Constant declaration
+			// AdvanceToken(parser, 2);
+			// LogPanic(0, "Constant decla");
+			result = ParseStatement(parser);
 		}
 	}
+	else
+	{
+		result = ParseStatement(parser);
+	}
+	
 	return result;
 }
 
@@ -675,7 +732,7 @@ internal ASTNode* Parse(Parser* parser)
 	for(;;)
 	{
 #if 1
-		ASTNode* node = ParseStatement(parser);
+		ASTNode* node = ParseTopLevelStatement(parser);
 		if(result)
 		{
 			last_node->Next = node;

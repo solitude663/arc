@@ -66,30 +66,29 @@ internal b32 TypesAreCompatible(TypeIndex t1, TypeIndex t2)
 internal Symbol* GetSymbol(SymbolTable* sym_table, const String8& name,
 						   b32 check_parent = true)
 {
+	// TODO(afb) :: Probaly shouldn't do a Assert.
 	Assert(sym_table);
-	Symbol* result = 0;
 	for(Symbol* s = sym_table->Symbols; s != 0; s = s->Next)
 	{
 		if(s->Name == name)
 		{
-			result = s;
-			break;
+			return s;
 		}
 	}
 
-	if(check_parent && (result == 0) && sym_table->Parent)
+	if(check_parent && sym_table->Parent)
 	{
-		result = GetSymbol(sym_table->Parent, name);
+		return GetSymbol(sym_table->Parent, name);
 	}
-	return result;
+	return 0;
 }
 
 internal void AddSymbol(M_Arena* arena, SymbolTable* sym_table,
 						String8 ident, TypeIndex type)
 {
 	Symbol* sym = PushStruct(arena, Symbol);
-	sym->Type = type;
 	sym->Name = ident;
+	sym->Type = type;
 	sym->Next = sym_table->Symbols;
 	sym_table->Symbols = sym;
 	sym_table->SymbolCount++;
@@ -111,6 +110,16 @@ internal FunctionType* GetFunction(TypeChecker* tc, const String8& function_name
 	return result;
 }
 
+internal const char* OpTypeToString(OperatorType op)
+{
+	if(op == Op_Addition) return "<addition>";
+	if(op == Op_Subtraction) return "<subtraction>";
+	if(op == Op_Multiplication) return "<multiplication>";
+	if(op == Op_Division) return "<division>";
+
+	return "<unknonw_operation>";
+}
+
 internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* node)
 {
 	TypeIndex result = -1;
@@ -126,6 +135,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			node->EvalType = result;
 		}break;
 
+#if 0
 		case(Node_BoolLiteral):
 		{
 			result = GetTypeIndex(tc, Type_Bool);
@@ -134,7 +144,8 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			// node->StackSize = tc->Types[result].Size;
 			node->EvalType = result;
 		}break;
-
+#endif
+		
 		case(Node_Binary):
 		{
 			TypeIndex t1 = CheckNode(tc, sym_table, node->Binary.Left);
@@ -148,6 +159,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 				case(Op_Subtraction):
 				case(Op_Division):
 				{
+#if 0
 					if(tc->Types[t1].Type != Type_Int ||
 					   !TypesAreCompatible(t1, t2))
 					{
@@ -155,12 +167,26 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 					}					
 					node->EvalType = t1;
 					result = t1;
+#endif
+					if(tc->Types[t1].Type == Type_Int && t1 == t2)
+					{
+						node->EvalType = t1;
+						result = t1;
+					}
+					else
+					{
+						// TODO(afb) :: Type checking error
+						TypeCheckerError(tc, 1, 1,
+										 "Types (%d) and (%d) are not compatible for operation (%s).\n",
+										 t1, t2, OpTypeToString(node->Binary.Operator));
+					}
 					
 				}break;
 
 				default:
 				{
-					LogPanicF(0, "Types are not compatible %ld & %ld", t1, t2);
+					fprintf(stderr, "Types (%d) and (%d) are not compatible for operation (%s).\n",
+							t1, t2, OpTypeToString(node->Binary.Operator));
 				}break;
 			}
 			
@@ -171,10 +197,15 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			Symbol* sym = GetSymbol(sym_table, node->Value.Lexeme);
 			if(sym == 0)
 			{
-				LogPanicF(0, "Error: Lookup cannot find symbol %S", node->Value.Lexeme);
+				TypeCheckerError(tc, 1, 1, "Referece to undefined symbol(%.*s)", Str8Print(node->Value.Lexeme));
+				result = GetTypeIndex(tc, Type_Void);				
 			}
-			result = sym->Type;
-			node->EvalType = result;
+			else
+			{
+				result = sym->Type;
+			}
+			
+			node->EvalType = result;				
 		}break;
 
 		case(Node_VariableDeclaration):
@@ -183,14 +214,18 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			Symbol* sym = GetSymbol(sym_table, ident, false);
 			if(sym != 0)
 			{
-				LogPanicF(0, "Error: Redefinition of variable %S in scope", ident);
+				TypeCheckerError(tc, 1, 1, "Redefinition of symbol %.*s in the same scope",
+								 Str8Print(ident));
 			}
 
 			// TODO(afb) :: Handle multiple types
 			TypeIndex type = ResolveType(tc, node->VDecl.Type);
 			AddSymbol(tc->Arena, sym_table, ident, type);
+			// printf("Declaration %.*s has index %u\n", Str8Print(ident), type);
+			
+			// TODO(afb) :: Default type void to index 0
 			result = GetTypeIndex(tc, Type_Void);
-			node->StackSize = tc->Types[result].Size;
+			node->StackSize = tc->Types[type].Size;
 		}break;
 
 		case(Node_Assignment):
@@ -199,7 +234,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			TypeIndex t1 = CheckNode(tc, sym_table, node->Assignment.Value);
 			if(t1 != sym->Type)
 			{
-				LogPanic(0, "Error: Assignment lhs and rhs does not match");
+				TypeCheckerError(tc, 1, 1, "Type of LHS and does not match type of RHS");
 			}
 			result = GetTypeIndex(tc, Type_Void);
 		}break;
@@ -306,26 +341,25 @@ internal void TypeCheck(TypeChecker* tc, ASTNode* tree)
 	{
 		CheckNode(tc, global_sym_table, node);
 	}
-
-	LogInfoF(0, "Type Count %ul", tc->TypeCount);
 }
 
 internal void TypeCheckerInit(TypeChecker* tc)
 {
+	*tc = {0};
 	tc->Arena = ArenaAlloc(MB(32));
 
-	tc->Types[0].Type = Type_Void;
-	tc->Types[0].Size = 0;
+	tc->Types[tc->TypeCount].Type = Type_Void;
+	tc->Types[tc->TypeCount].Size = 0;
 	tc->TypeCount++;
 
-	tc->Types[1].Type = Type_Int;
-	tc->Types[1].Size = 8;
+	tc->Types[tc->TypeCount].Type = Type_Int;
+	tc->Types[tc->TypeCount].Size = 8;
 	tc->TypeCount++;
 	
-	tc->Types[2].Type = Type_Bool;
-	tc->Types[2].Size = 1;
-	tc->TypeCount++;
+	// tc->types[tc->typecount].type = type_bool;
+	// tc->types[tc->typecount].size = 1;
+	// tc->typecount++;
 
-	ArenaFree(tc->Arena);
+	// ArenaFree(tc->Arena);
 }
 

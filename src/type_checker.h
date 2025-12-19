@@ -72,11 +72,12 @@ struct SymbolTable
 struct TypeChecker
 {
 	M_Arena* Arena;
-
+	u32 ErrorCount;
+	
 #define TYPE_CAPACITY 1024
 	TypeInfo Types[TYPE_CAPACITY];
-	u32 TypeCount;
-
+	u32 TypeCount;	
+	
 #define FUNCTION_CAPACITY 1024
 	FunctionType Functions[FUNCTION_CAPACITY];
 	u32 FunctionCount;

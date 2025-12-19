@@ -9,7 +9,14 @@ global int ErrorCounter;
 		fprintf(stderr, (message), ##__VA_ARGS__);						\
 		fprintf(stderr, "\n");											\
 	}while(0)
-	
+
+#define TypeCheckerError(tc, row, col, message, ...) do{				\
+		(tc)->ErrorCount++;											\
+		fprintf(stderr, "%d:%d [typer] ", row, col); \
+		fprintf(stderr, (message), ##__VA_ARGS__);						\
+		fprintf(stderr, "\n");											\
+	}while(0)
+
 
 internal void LogError_(String8 message)
 {

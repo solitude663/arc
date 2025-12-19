@@ -34,7 +34,7 @@ enum TokenType
 	Token_Bool,
 	Token_True,
 	Token_False,
-
+	Token_Extern,
 	Token_Count,
 };
 
@@ -81,6 +81,7 @@ enum NodeType
 	Node_VariableDeclaration,
 	Node_Assignment,
 	Node_Function,
+	Node_FunctionPrototype,
 	Node_FunctionCall,
 	Node_Block,
 	Node_Print,
@@ -134,13 +135,18 @@ struct FunctionArgument
 	FunctionArgument* Next;
 };
 
-struct FunctionNode
+struct FunctionPrototype
 {
 	Token Name;
 	TypeDef* ReturnType;
 	FunctionArgument* Args;
-	ASTNode* Body;
 	u32 ArgCount;
+};
+
+struct FunctionNode
+{
+	ASTNode* Prototype;
+	ASTNode* Body;
 };
 
 struct FunctionCallNode
@@ -169,6 +175,7 @@ struct ASTNode
 		VarAssignment Assignment;
 		VarDeclaration VDecl;
 		FunctionNode Func;
+		FunctionPrototype Proto;
 		FunctionCallNode FCall;
 		BlockNode Block;
 	};
