@@ -17,6 +17,7 @@ enum TokenType
 	Token_OpenBracket = '[',
 	Token_CloseBracket = ']',
 	Token_Comma = ',',
+	Token_Dot = '.',
 
 	Token_OpenBrace = '{',
 	Token_CloseBrace = '}',
@@ -25,12 +26,14 @@ enum TokenType
 	Token_Invalid = 404,	
 	
 	Token_IntegerLiteral = 300,
+	Token_FloatLiteral,
 
 	Token_ColonColon,
 	
 	Token_Identifier,
 	Token_Print,
 	Token_Int,
+	Token_Float,
 	Token_Bool,
 	Token_True,
 	Token_False,
@@ -48,6 +51,12 @@ struct Token
 	u32 RowNumber;
 	u32 ColumnNumber;
 	String8 FilePath; // TODO(afb) :: Should be a index to a file
+
+	union
+	{
+		i64 IntValue;
+		f64 FloatValue;
+	};
 };
 
 struct Parser
@@ -75,6 +84,7 @@ struct TypeDef;
 enum NodeType
 {
 	Node_IntegerLiteral,
+	Node_FloatLiteral,
 	Node_BoolLiteral,
 	Node_Binary,
 	Node_Lookup,
@@ -136,11 +146,12 @@ struct FunctionArgument
 };
 
 struct FunctionPrototype
-{
+{	
 	Token Name;
 	TypeDef* ReturnType;
 	FunctionArgument* Args;
 	u32 ArgCount;
+	b32 Extern;
 };
 
 struct FunctionNode
@@ -166,6 +177,8 @@ struct ASTNode
 	NodeType Type;
 	TypeIndex EvalType;
 	u64 StackSize;
+
+	SymbolTable* Scope;
 	
 	union
 	{

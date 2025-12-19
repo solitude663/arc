@@ -46,6 +46,7 @@ internal TokenType GetKeywordOrIdentifier(const String8& lexeme)
 	
 	if(lexeme == "print") result = Token_Print;
 	if(lexeme == "int") result = Token_Int;
+	if(lexeme == "float") result = Token_Float;
 	if(lexeme == "bool") result = Token_Bool;
 	if(lexeme == "true") result = Token_True;
 	if(lexeme == "false") result = Token_False;
@@ -148,16 +149,41 @@ internal Token ParseToken(Parser* parser)
 		{
 			if(IsDigit(current))
 			{
+				b8 found_dot = false;
 				u64 start = parser->CurrentOffset;
-				while(IsDigit(current))
-				{
-					AdvanceChar(parser);
-					// parser->CurrentOffset++;
+				for(;;)
+				{					
+					if(IsDigit(current))
+					{
+						AdvanceChar(parser);						
+					}
+					else if(current == '.' && !found_dot)
+					{
+						AdvanceChar(parser);
+						found_dot = true;
+					}
+					else
+					{
+						break;
+					}
+					
 					current = CurrentChar(parser);
 				}
 				u64 end = parser->CurrentOffset;
+
+				f64 val = strtod((char*)parser->Data.Str + start, 0);
+
+				if(found_dot)
+				{
+					result.Type = Token_FloatLiteral;
+					result.FloatValue = val;
+				}
+				else
+				{
+					result.Type = Token_IntegerLiteral;
+					result.IntValue = (i64)val;
+				}
 				
-				result.Type = Token_IntegerLiteral;
 				result.Lexeme = Substr8(parser->Data, start, end - start);
 			}
 			else if(IsAlpha(current) || current == '_')
@@ -250,12 +276,13 @@ internal Token MatchToken(Parser* parser, TokenType type)
 	if(result.Type != type)
 	{
 		ParserError(parser, result, "Expected (%s) but recieved %.*s", GetTokenTypeString(type), Str8Print(result.Lexeme));
-		
-		// TODO(afb) :: Report error
-		// LogErrorF(0, "Match error: Expected %s but recieved %s", GetTokenTypeString(type), GetTokenTypeString(result.Type));
 		result.Type = type;
 	}
-	AdvanceToken(parser);
+	else
+	{
+		AdvanceToken(parser);		
+	}
+	
 	return result;
 }
 
@@ -305,6 +332,61 @@ inline OperatorType GetOperatorFromToken(TokenType type)
 	return Op_None;
 }
 
+
+internal TypeDef* ParseType(Parser* parser, bool log_error = true)
+{
+	TypeDef* result = 0;
+	
+	Token tk = PeekToken(parser);
+	if(tk.Type == Token_Int)
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Int;
+	}
+	if(tk.Type == Token_Float)
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Float;
+	}
+#if 0
+	else if(tk.Type == Token_Bool)
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Bool;
+	}
+	else if(tk.Type == Token_Star) // Poitners
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Pointer;
+		result->Base = ParseType(parser);
+	}
+	else if(tk.Type == Token_OpenBracket) // Arrays
+	{
+		AdvanceToken(parser);
+		result = PushStructZero(parser->Arena, TypeDef);
+		result->Type = Type_Array;
+		Token size = MatchToken(parser, Token_IntegerLiteral);
+		result->Size = size;
+		MatchToken(parser, Token_CloseBracket);
+		result->Base = ParseType(parser);		
+	}
+#endif
+	
+	if(log_error && !result)
+	{
+		Token error_tok = PeekToken(parser);
+		ParserError(parser, tk, "Error while parsing type. Recieved %.*s",
+					Str8Print(tk.Lexeme));
+		AdvanceToken(parser);
+	}
+
+	return result;
+}
+
 internal ASTNode* ParseExpression(Parser* parser);
 
 internal ASTNode* ParsePrimary(Parser* parser)
@@ -316,6 +398,12 @@ internal ASTNode* ParsePrimary(Parser* parser)
 	{
 		AdvanceToken(parser);
 		result = CreateASTNode(parser->Arena, Node_IntegerLiteral);
+		result->Value = token;
+	}
+	else if(token.Type == Token_FloatLiteral)
+	{
+		AdvanceToken(parser);
+		result = CreateASTNode(parser->Arena, Node_FloatLiteral);
 		result->Value = token;
 	}
 	else if(token.Type == Token_True || token.Type == Token_False)
@@ -331,6 +419,11 @@ internal ASTNode* ParsePrimary(Parser* parser)
 		{
 			case(Token_OpenParen):
 			{
+				if(!parser->InFunction)
+				{
+					ParserError(parser, token, "Cannot call a function when not in a function");
+				}
+				
 				AdvanceToken(parser, 2);
 				Token func_name = token;
 
@@ -429,53 +522,6 @@ internal ASTNode* ParseExpression(Parser* parser)
 	return ParseBinaryExpression(parser);
 }
 
-internal TypeDef* ParseType(Parser* parser, bool log_error = true)
-{
-	TypeDef* result = 0;
-	
-	Token tk = PeekToken(parser);
-	if(tk.Type == Token_Int)
-	{
-		AdvanceToken(parser);
-		result = PushStructZero(parser->Arena, TypeDef);
-		result->Type = Type_Int;
-	}
-#if 0
-	else if(tk.Type == Token_Bool)
-	{
-		AdvanceToken(parser);
-		result = PushStructZero(parser->Arena, TypeDef);
-		result->Type = Type_Bool;
-	}
-	else if(tk.Type == Token_Star) // Poitners
-	{
-		AdvanceToken(parser);
-		result = PushStructZero(parser->Arena, TypeDef);
-		result->Type = Type_Pointer;
-		result->Base = ParseType(parser);
-	}
-	else if(tk.Type == Token_OpenBracket) // Arrays
-	{
-		AdvanceToken(parser);
-		result = PushStructZero(parser->Arena, TypeDef);
-		result->Type = Type_Array;
-		Token size = MatchToken(parser, Token_IntegerLiteral);
-		result->Size = size;
-		MatchToken(parser, Token_CloseBracket);
-		result->Base = ParseType(parser);		
-	}
-#endif
-	
-	if(log_error && !result)
-	{
-		Token error_tok = PeekToken(parser);
-		ParserError(parser, tk, "Error while parsing type. Recieved %.*s",
-					Str8Print(tk.Lexeme));
-		AdvanceToken(parser);
-	}
-
-	return result;
-}
 
 internal ASTNode* ParseStatement(Parser* parser)
 {
@@ -535,7 +581,7 @@ internal ASTNode* ParseStatement(Parser* parser)
 			if(!parser->InFunction)
 			{
 				ParserError(parser, PeekToken(parser), "A floating block can NOT exist outside a function");
-			}			
+			}
 			AdvanceToken(parser);
 
 			ASTNode* first = 0;
@@ -581,26 +627,6 @@ internal ASTNode* ParseStatement(Parser* parser)
 	}
 	return result;
 }
-
-/*
-  1.
-  func :: () {
-  
-  }
-  
-  2.
-  func :: (a: int, b: int);
-
-  3.
-  import "file"
-
-  4.
-  extern func :: (a: int) int;
-
-  5. 
-  var :: 1;
-  var := 1;
- */
 
 internal FunctionArgument* ParseFunctionArguments(Parser* parser,
 												  u32* result_arg_count)
@@ -716,6 +742,13 @@ internal ASTNode* ParseTopLevelStatement(Parser* parser)
 			// LogPanic(0, "Constant decla");
 			result = ParseStatement(parser);
 		}
+	}
+	else if(PeekToken(parser).Type == Token_Extern)
+	{
+		MatchToken(parser, Token_Extern);
+		result = ParseFunctionPrototype(parser);
+		result->Proto.Extern = true;
+		MatchToken(parser, Token_SemiColon);
 	}
 	else
 	{

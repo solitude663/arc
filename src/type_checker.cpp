@@ -67,16 +67,17 @@ internal Symbol* GetSymbol(SymbolTable* sym_table, const String8& name,
 						   b32 check_parent = true)
 {
 	// TODO(afb) :: Probaly shouldn't do a Assert.
-	Assert(sym_table);
+	if(sym_table == 0) return 0;
+	
 	for(Symbol* s = sym_table->Symbols; s != 0; s = s->Next)
 	{
 		if(s->Name == name)
-		{
+		{			
 			return s;
 		}
 	}
-
-	if(check_parent && sym_table->Parent)
+	
+	if(check_parent && sym_table->Parent != 0)
 	{
 		return GetSymbol(sym_table->Parent, name);
 	}
@@ -135,6 +136,15 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			node->EvalType = result;
 		}break;
 
+		case(Node_FloatLiteral):
+		{
+			result = GetTypeIndex(tc, Type_Float);
+			Assert(result > -1);
+			
+			// node->StackSize = tc->Types[result].Size;
+			node->EvalType = result;
+		}break;
+
 #if 0
 		case(Node_BoolLiteral):
 		{
@@ -180,7 +190,8 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 										 "Types (%d) and (%d) are not compatible for operation (%s).\n",
 										 t1, t2, OpTypeToString(node->Binary.Operator));
 					}
-					
+
+					node->Scope = sym_table;
 				}break;
 
 				default:
@@ -205,7 +216,8 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 				result = sym->Type;
 			}
 			
-			node->EvalType = result;				
+			node->EvalType = result;
+			node->Scope = sym_table;
 		}break;
 
 		case(Node_VariableDeclaration):
@@ -226,17 +238,29 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			// TODO(afb) :: Default type void to index 0
 			result = GetTypeIndex(tc, Type_Void);
 			node->StackSize = tc->Types[type].Size;
+
+			node->Scope = sym_table;
 		}break;
 
 		case(Node_Assignment):
 		{
 			Symbol* sym = GetSymbol(sym_table, node->Assignment.Ident.Lexeme);
-			TypeIndex t1 = CheckNode(tc, sym_table, node->Assignment.Value);
-			if(t1 != sym->Type)
+			if(sym)
 			{
-				TypeCheckerError(tc, 1, 1, "Type of LHS and does not match type of RHS");
+				TypeIndex t1 = CheckNode(tc, sym_table, node->Assignment.Value);
+				if(t1 != sym->Type)
+				{
+					TypeCheckerError(tc, 1, 1, "Type of LHS and does not match type of RHS");
+				}
 			}
+			else
+			{
+				TypeCheckerError(tc, 1, 1, "Reference to undeclared variable '%.*s'",
+								 Str8Print(node->Assignment.Ident.Lexeme));
+			}
+
 			result = GetTypeIndex(tc, Type_Void);
+			node->Scope = sym_table;
 		}break;
 
 		case(Node_Block):
@@ -250,7 +274,8 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 				node->StackSize += n->StackSize;
 			}
 
-			result = GetTypeIndex(tc, Type_Void);			
+			result = GetTypeIndex(tc, Type_Void);
+			node->Scope = table;
 		}break;
 
 		case(Node_Function):
@@ -258,47 +283,61 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			SymbolTable* table = PushStructZero(tc->Arena, SymbolTable);
 			table->Parent = sym_table;
 
-			FunctionType func = {0};
-			if(node->Func.ArgCount)
+			tc->InFunction = true;
+			TypeIndex return_type = CheckNode(tc, table, node->Func.Prototype);
+			CheckNode(tc, table, node->Func.Body); // TODO(afb) :: Return statements
+			tc->InFunction = false;
+			
+			result = return_type;
+			node->Scope = table;
+		}break;
+
+		case(Node_FunctionPrototype):
+		{			
+			SymbolTable* table = sym_table;
+			if(!tc->InFunction)
 			{
-				func.ArgNames = PushArray(tc->Arena, String8, node->Func.ArgCount);
-				func.ArgTypes = PushArray(tc->Arena, TypeIndex, node->Func.ArgCount);
-				func.ArgCount = node->Func.ArgCount;
+				PushStructZero(tc->Arena, SymbolTable);
+				table->Parent = sym_table;
+			}
+
+			FunctionType func = {0};
+			if(node->Proto.ArgCount)
+			{
+				func.ArgNames = PushArray(tc->Arena, String8, node->Proto.ArgCount);
+				func.ArgTypes = PushArray(tc->Arena, TypeIndex, node->Proto.ArgCount);
+				func.ArgCount = node->Proto.ArgCount;
 			}
 
 			u32 index = 0;
-			for(FunctionArgument* n = node->Func.Args;
-				n != 0;
-				n = n->Next)
+			for(FunctionArgument* arg = node->Proto.Args; arg != 0; arg = arg->Next)
 			{
-				TypeIndex type = ResolveType(tc, n->Type);
-				func.ArgNames[index] = n->Ident.Lexeme;
+				TypeIndex type = ResolveType(tc, arg->Type);
+				func.ArgNames[index] = arg->Ident.Lexeme;
 				func.ArgTypes[index] = type;
 				index++;
 				
 				// node->StackSize += tc->Types[type].Size;
-				AddSymbol(tc->Arena, table, n->Ident.Lexeme, type);
+				AddSymbol(tc->Arena, table, arg->Ident.Lexeme, type);
 			}
 
-			CheckNode(tc, table, node->Func.Body);
-
 			TypeIndex return_type;
-			if(node->Func.ReturnType)
+			if(node->Proto.ReturnType)
 			{
-				return_type = ResolveType(tc, node->Func.ReturnType);
+				return_type = ResolveType(tc, node->Proto.ReturnType);
 			}
 			else
 			{
 				return_type = GetTypeIndex(tc, Type_Void);
 			}
 
-			func.Name = node->Func.Name.Lexeme;
+			func.Name = node->Proto.Name.Lexeme;
 			func.ReturnType = return_type;
-			tc->Functions[tc->FunctionCount++] = func;
-			
-			result = return_type;
-		}break;
 
+			tc->Functions[tc->FunctionCount++] = func;
+			result = return_type;			
+		}break;
+		
 		case(Node_FunctionCall):
 		{
 			FunctionCallNode* func = &node->FCall;
@@ -307,7 +346,8 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			{
 				LogPanicF(0, "Function '%S' does not exist", func->Name.Lexeme);
 			}
-			
+
+			node->Scope = sym_table;
 		}break;
 		
 		case(Node_Print):
@@ -321,6 +361,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 				LogPanic(0, "Print only supports int and bool currently");
 			}
 			result = GetTypeIndex(tc, Type_Void);
+			node->Scope = sym_table;
 		}break;
 		
 		default:
@@ -336,7 +377,7 @@ internal void TypeCheck(TypeChecker* tc, ASTNode* tree)
 {
 	SymbolTable* global_sym_table =
 		PushStructZero(tc->Arena, SymbolTable);
-	
+
 	for(ASTNode* node = tree; node != 0; node = node->Next)
 	{
 		CheckNode(tc, global_sym_table, node);
@@ -355,7 +396,11 @@ internal void TypeCheckerInit(TypeChecker* tc)
 	tc->Types[tc->TypeCount].Type = Type_Int;
 	tc->Types[tc->TypeCount].Size = 8;
 	tc->TypeCount++;
-	
+
+	tc->Types[tc->TypeCount].Type = Type_Float;
+	tc->Types[tc->TypeCount].Size = 8;
+	tc->TypeCount++;
+
 	// tc->types[tc->typecount].type = type_bool;
 	// tc->types[tc->typecount].size = 1;
 	// tc->typecount++;

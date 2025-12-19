@@ -58,7 +58,11 @@ struct Symbol
 {
 	TypeIndex Type;
 	String8 Name;
+
+	LLVMValueRef Value;
+
 	Symbol* Next;
+
 	// b32 IsConstant;
 };
 
@@ -73,6 +77,8 @@ struct TypeChecker
 {
 	M_Arena* Arena;
 	u32 ErrorCount;
+
+	b32 InFunction;
 	
 #define TYPE_CAPACITY 1024
 	TypeInfo Types[TYPE_CAPACITY];

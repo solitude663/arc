@@ -1,21 +1,29 @@
 #include <base_inc.h>
 #include <base_inc.cpp>
 
+#include <llvm-c/Core.h>
+#include <llvm-c/Analysis.h>
+#include <llvm-c/Target.h>
+#include <llvm-c/TargetMachine.h>
+
 #include "./logger.cpp"
 
 #include "./parser.h"
 #include "./parser.cpp"
 
+#include "./type_checker.h"
+#include "./type_checker.cpp"
+
+#include "./llvm_ir_generator.h"
+#include "./llvm_ir_generator.cpp"
+
 // #include "./code_generator.h"
 // #include "./code_generator.cpp"
-
-// #include "./type_checker.h"
-// #include "./type_checker.cpp"
 
 
 internal void PrintASTNode(ASTNode* node, i32 level);
 internal void PrintAST(ASTNode* node, i32 level);
-	
+
 internal void PrintASTNode(ASTNode* node, i32 level = 0)
 {
 	for(i32 i = 0; i < level; i++)
@@ -28,6 +36,11 @@ internal void PrintASTNode(ASTNode* node, i32 level = 0)
 		case(Node_IntegerLiteral):
 		{
 			printf("INT_LIT(%.*s)\n", Str8Print(node->Value.Lexeme));
+		}break;
+
+		case(Node_FloatLiteral):
+		{
+			printf("FLOAT_LIT(%.*s)\n", Str8Print(node->Value.Lexeme));
 		}break;
 
 		case(Node_BoolLiteral):
@@ -58,7 +71,8 @@ internal void PrintASTNode(ASTNode* node, i32 level = 0)
 
 		case(Node_FunctionPrototype):
 		{
-			printf("PROTO(%.*s)\n", Str8Print(node->Proto.Name.Lexeme));
+			printf("%s(%.*s)\n", node->Proto.Extern ? "EXTERN" : "PROTO",
+				   Str8Print(node->Proto.Name.Lexeme));
 		}break;
 		
 		case(Node_Block):
@@ -148,15 +162,26 @@ internal void MainEntry(i32 argc, char** argv)
 	{
 		LogPanicF(0, "Parsing failed with %d error(s)", parser.ErrorCount);
 	}
-	// CodeGenerator code_gen = {0};
-	// code_gen.Arena = arena;
-
-#if 0
+	printf("===== Parsing complete\n");
+	
 	TypeChecker type_checker = {};
 	TypeCheckerInit(&type_checker);
 	TypeCheck(&type_checker, program);
+	
+	if(type_checker.ErrorCount)
+	{
+		LogPanicF(0, "Type checking failed with %d error(s)", type_checker.ErrorCount);
+	}
 	printf("===== Type checking complete. Found %u type(s)\n", type_checker.TypeCount);
-   
+
+#if 0
+	LLVMIRGen llvm = {0};
+	LLVMInit(&llvm);
+	LLVMGenIR(&llvm, program);
+	
+   	// CodeGenerator code_gen = {0};
+	// code_gen.Arena = arena;
+
 	String8 output = GenerateAssembly(arena, program);
 	String8 output_filename = "./out.nasm";
 	OS_Handle handle = OS_FileOpen(output_filename,

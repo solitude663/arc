@@ -5,7 +5,7 @@ global int ErrorCounter;
 
 #define ParserError(parser, token, message, ...) do{					\
 		(parser)->ErrorCount++;											\
-		fprintf(stderr, "%.*s:%d:%d [pasrer] ", Str8Print((parser)->FileToCompile), (token).RowNumber+1, (token).ColumnNumber+1); \
+		fprintf(stderr, "%.*s: line %d:%d [parser] ", Str8Print((parser)->FileToCompile), (token).RowNumber+1, (token).ColumnNumber+1); \
 		fprintf(stderr, (message), ##__VA_ARGS__);						\
 		fprintf(stderr, "\n");											\
 	}while(0)
