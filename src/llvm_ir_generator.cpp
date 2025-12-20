@@ -23,6 +23,8 @@ internal LLVMValueRef GetValue(SymbolTable* scope, const String8& name)
 
 internal void SetValue(SymbolTable* scope, const String8& name, LLVMValueRef value)
 {
+	Assert(scope);
+	
 	for(Symbol* s = scope->Symbols; s != 0; s = s->Next)
 	{
 		if(s->Name == name)
