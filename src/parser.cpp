@@ -664,6 +664,7 @@ internal FunctionArgument* ParseFunctionArguments(Parser* parser,
 			current = PeekToken(parser);
 			if(current.Type == ',') //  || current.Type == Token_EOF)
 			{
+				MatchToken(parser, Token_Comma);
 				continue;
 			}
 

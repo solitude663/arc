@@ -8,6 +8,11 @@ struct LLVMIRGen
 	LLVMModuleRef Module;
 	LLVMBuilderRef Builder;
 
+	b32 InFunction;
+	
+	TypeInfo* Types;
+	u32 TypeCount;
+	
 	LLVMTypeRef IntType;
 	LLVMTypeRef FloatType;
 };

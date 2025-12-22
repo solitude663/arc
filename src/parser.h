@@ -95,6 +95,7 @@ enum NodeType
 	Node_FunctionCall,
 	Node_Block,
 	Node_Print,
+	Node_Cast,
 };
 
 enum OperatorType
@@ -172,6 +173,13 @@ struct BlockNode
 	ASTNode* Stmts;
 };
 
+struct CastNode
+{
+	TypeDef* TargetType;
+	ASTNode* Value;
+	b32 Implicit;
+};
+
 struct ASTNode
 {
 	NodeType Type;
@@ -191,6 +199,7 @@ struct ASTNode
 		FunctionPrototype Proto;
 		FunctionCallNode FCall;
 		BlockNode Block;
+		CastNode Cast;
 	};
 
 	ASTNode* Next;

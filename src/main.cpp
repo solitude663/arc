@@ -6,6 +6,7 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 
+
 #include "./logger.cpp"
 
 #include "./parser.h"
@@ -109,6 +110,12 @@ internal void PrintASTNode(ASTNode* node, i32 level = 0)
 			PrintAST(node->FCall.Params, level + 1);
 		}break;
 		
+		case(Node_Cast):
+		{
+			printf("CAST\n");
+			PrintAST(node->Cast.Value, level + 1);
+		}break;
+		
 		default:
 		{
 			LogPanic(0, "DIDIDIDID");
@@ -167,6 +174,11 @@ internal void MainEntry(i32 argc, char** argv)
 	TypeChecker type_checker = {};
 	TypeCheckerInit(&type_checker);
 	TypeCheck(&type_checker, program);
+
+	if(type_checker.TreeChanged)
+	{
+		PrintAST(program);
+	}
 	
 	if(type_checker.ErrorCount)
 	{
@@ -174,10 +186,22 @@ internal void MainEntry(i32 argc, char** argv)
 	}
 	printf("===== Type checking complete. Found %u type(s)\n", type_checker.TypeCount);
 
-#if 0
 	LLVMIRGen llvm = {0};
-	LLVMInit(&llvm);
+	LLVMInit(&llvm, type_checker.Arena);
+	llvm.Types = type_checker.Types;
+	llvm.TypeCount = type_checker.TypeCount;
+
 	LLVMGenIR(&llvm, program);
+
+	// After your function generation is complete (e.g., after GenIR for the function)
+	LLVMPrintModuleToFile(llvm.Module, "output.ll", NULL);  // Saves to file
+
+// Or print directly to stderr (great for debugging)
+	// char* s = LLVMPrintModuleToString(llvm.Module);
+	// printf(s);
+
+#if 0
+		
 	
    	// CodeGenerator code_gen = {0};
 	// code_gen.Arena = arena;

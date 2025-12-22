@@ -6,7 +6,7 @@ typedef i64 TypeIndex;
 enum TypeKind
 {
 	// Static types
-	Type_Void,
+	Type_Void = 0,
 	Type_Bool,
 	Type_Int,
 	Type_Float,
@@ -78,6 +78,7 @@ struct TypeChecker
 	M_Arena* Arena;
 	u32 ErrorCount;
 
+	b32 TreeChanged;
 	b32 InFunction;
 	
 #define TYPE_CAPACITY 1024

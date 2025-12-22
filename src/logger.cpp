@@ -17,6 +17,7 @@ global int ErrorCounter;
 		fprintf(stderr, "\n");											\
 	}while(0)
 
+#define Unhandled() do { fprintf(stderr, "%s:%d:1 [%s]\n", __FILE__, __LINE__, __FUNCTION__); }while(0);
 
 internal void LogError_(String8 message)
 {

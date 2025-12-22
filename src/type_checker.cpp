@@ -72,7 +72,7 @@ internal Symbol* GetSymbol(SymbolTable* sym_table, const String8& name,
 	for(Symbol* s = sym_table->Symbols; s != 0; s = s->Next)
 	{
 		if(s->Name == name)
-		{			
+		{
 			return s;
 		}
 	}
@@ -121,6 +121,26 @@ internal const char* OpTypeToString(OperatorType op)
 	return "<unknonw_operation>";
 }
 
+internal ASTNode* GenerateCastNode(TypeChecker* tc, TypeIndex target_type,
+								   ASTNode* original)
+{
+	ASTNode* result = CreateASTNode(tc->Arena, Node_Cast);
+	result->EvalType = target_type;
+	result->Cast.Value = original;
+	result->Cast.Implicit = true;
+	return result;
+}
+
+internal b8 TypeIsNumeric(TypeChecker* tc, TypeIndex type)
+{
+	b8 result = false;
+	if(tc->Types[type].Type == Type_Int || tc->Types[type].Type == Type_Float)
+	{
+		result = true;
+	}
+	return result;
+}
+
 internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* node)
 {
 	TypeIndex result = -1;
@@ -155,6 +175,18 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			node->EvalType = result;
 		}break;
 #endif
+
+		case(Node_Cast):
+		{
+			if(node->Cast.Implicit)
+			{
+				result = node->EvalType;
+			}
+			else
+			{
+				Unhandled();
+			}
+		}break;
 		
 		case(Node_Binary):
 		{
@@ -169,22 +201,33 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 				case(Op_Subtraction):
 				case(Op_Division):
 				{
-#if 0
-					if(tc->Types[t1].Type != Type_Int ||
-					   !TypesAreCompatible(t1, t2))
-					{
-						LogPanicF(0, "Types are not compatible %l & %l", t1, t2);
-					}					
-					node->EvalType = t1;
-					result = t1;
-#endif
-					if(tc->Types[t1].Type == Type_Int && t1 == t2)
+					if(t1 == t2) // TODO(afb) :: A bunch of checks about types
 					{
 						node->EvalType = t1;
 						result = t1;
 					}
+					else if(TypeIsNumeric(tc, t1) && TypeIsNumeric(tc, t2))
+					{
+						tc->TreeChanged = true;
+						if(tc->Types[t1].Type == Type_Int)
+						{
+							ASTNode* new_node = GenerateCastNode(tc, t2, node->Binary.Left);
+							node->Binary.Left = new_node;
+							node->EvalType = t2;
+						}
+						else
+						{
+							ASTNode* new_node = GenerateCastNode(tc, t1, node->Binary.Right);
+							node->Binary.Right = new_node;
+							node->EvalType = t1;
+						}
+						
+						result = node->EvalType;
+					}
 					else
 					{
+						printf("BAD\n");
+						Unhandled();
 						// TODO(afb) :: Type checking error
 						TypeCheckerError(tc, 1, 1,
 										 "Types (%d) and (%d) are not compatible for operation (%s).\n",
@@ -196,6 +239,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 
 				default:
 				{
+					Unhandled();
 					fprintf(stderr, "Types (%d) and (%d) are not compatible for operation (%s).\n",
 							t1, t2, OpTypeToString(node->Binary.Operator));
 				}break;
@@ -233,7 +277,6 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			// TODO(afb) :: Handle multiple types
 			TypeIndex type = ResolveType(tc, node->VDecl.Type);
 			AddSymbol(tc->Arena, sym_table, ident, type);
-			// printf("Declaration %.*s has index %u\n", Str8Print(ident), type);
 			
 			// TODO(afb) :: Default type void to index 0
 			result = GetTypeIndex(tc, Type_Void);
@@ -247,14 +290,27 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			Symbol* sym = GetSymbol(sym_table, node->Assignment.Ident.Lexeme);
 			if(sym)
 			{
-				TypeIndex t1 = CheckNode(tc, sym_table, node->Assignment.Value);
-				if(t1 != sym->Type)
+				TypeIndex t1 = sym->Type;
+				TypeIndex t2 = CheckNode(tc, sym_table, node->Assignment.Value);
+				if(TypeIsNumeric(tc, t1) && TypeIsNumeric(tc, t2))
 				{
-					TypeCheckerError(tc, 1, 1, "Type of LHS and does not match type of RHS");
+					if(t1 != t2)
+					{
+						TypeIndex target_type = t1;
+						ASTNode* new_node = GenerateCastNode(tc, t1, node->Assignment.Value);
+						node->Assignment.Value = new_node;						
+					}
+					node->EvalType = t1;
+				}
+				else
+				{
+					Unhandled();
+					TypeCheckerError(tc, 1, 1, "Types cannot perform binary ops");
 				}
 			}
 			else
 			{
+				Unhandled();
 				TypeCheckerError(tc, 1, 1, "Reference to undeclared variable '%.*s'",
 								 Str8Print(node->Assignment.Ident.Lexeme));
 			}
