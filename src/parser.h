@@ -22,6 +22,7 @@ enum TokenType
 	Token_OpenBrace = '{',
 	Token_CloseBrace = '}',
 	
+	
 	Token_EOF = '\0',
 	Token_Invalid = 404,	
 	
@@ -29,6 +30,7 @@ enum TokenType
 	Token_FloatLiteral,
 
 	Token_ColonColon,
+	Token_ColonEqual,
 	
 	Token_Identifier,
 	Token_Print,
@@ -118,6 +120,9 @@ struct VarDeclaration
 {
 	Token Ident;
 	TypeDef* Type;
+	ASTNode* Value;
+	b32 Constant;
+	b32 Implicit;
 };
 
 struct VarAssignment

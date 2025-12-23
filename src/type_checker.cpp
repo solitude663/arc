@@ -85,11 +85,12 @@ internal Symbol* GetSymbol(SymbolTable* sym_table, const String8& name,
 }
 
 internal void AddSymbol(M_Arena* arena, SymbolTable* sym_table,
-						String8 ident, TypeIndex type)
+						String8 ident, TypeIndex type, b32 constant)
 {
 	Symbol* sym = PushStruct(arena, Symbol);
 	sym->Name = ident;
 	sym->Type = type;
+	sym->Constant = constant;
 	sym->Next = sym_table->Symbols;
 	sym_table->Symbols = sym;
 	sym_table->SymbolCount++;
@@ -272,12 +273,23 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			{
 				TypeCheckerError(tc, 1, 1, "Redefinition of symbol %.*s in the same scope",
 								 Str8Print(ident));
+				result = GetTypeIndex(tc, Type_Void);
+				node->Scope = sym_table;
+				return result;
 			}
 
-			// TODO(afb) :: Handle multiple types
-			TypeIndex type = ResolveType(tc, node->VDecl.Type);
-			AddSymbol(tc->Arena, sym_table, ident, type);
+			TypeIndex type = -1;
+			if(node->VDecl.Implicit)
+			{
+				type = CheckNode(tc, sym_table, node->VDecl.Value);
+			}
+			else
+			{
+				// TODO(afb) :: Handle multiple types
+				type = ResolveType(tc, node->VDecl.Type);
+			}
 			
+			AddSymbol(tc->Arena, sym_table, ident, type, node->VDecl.Constant);
 			// TODO(afb) :: Default type void to index 0
 			result = GetTypeIndex(tc, Type_Void);
 			node->StackSize = tc->Types[type].Size;
@@ -290,6 +302,16 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 			Symbol* sym = GetSymbol(sym_table, node->Assignment.Ident.Lexeme);
 			if(sym)
 			{
+				if(sym->Constant)
+				{
+					Unhandled();
+					TypeCheckerError(tc, 1, 1, "Trying to modify constant '%.*s'",
+									 Str8Print(sym->Name));
+
+					node->Scope = sym_table;
+					return GetTypeIndex(tc, Type_Void);
+				}
+				
 				TypeIndex t1 = sym->Type;
 				TypeIndex t2 = CheckNode(tc, sym_table, node->Assignment.Value);
 				if(TypeIsNumeric(tc, t1) && TypeIsNumeric(tc, t2))
@@ -374,7 +396,7 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 				index++;
 				
 				// node->StackSize += tc->Types[type].Size;
-				AddSymbol(tc->Arena, table, arg->Ident.Lexeme, type);
+				AddSymbol(tc->Arena, table, arg->Ident.Lexeme, type, false);
 			}
 
 			TypeIndex return_type;

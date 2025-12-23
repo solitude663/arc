@@ -156,7 +156,7 @@ internal void MainEntry(i32 argc, char** argv)
 	String8 target_full_path = OS_PathConcat(arena, working_directory, file_to_compile);
 
 	printf("\n===== %.*s\n", Str8Print(target_full_path));
-
+	
 	Parser parser = {0};
 	parser.Arena = arena;
 	parser.Data = file_contents;
@@ -170,7 +170,8 @@ internal void MainEntry(i32 argc, char** argv)
 		LogPanicF(0, "Parsing failed with %d error(s)", parser.ErrorCount);
 	}
 	printf("===== Parsing complete\n");
-	
+
+	printf("\n===== Type checking\n");
 	TypeChecker type_checker = {};
 	TypeCheckerInit(&type_checker);
 	TypeCheck(&type_checker, program);
@@ -185,7 +186,7 @@ internal void MainEntry(i32 argc, char** argv)
 		LogPanicF(0, "Type checking failed with %d error(s)", type_checker.ErrorCount);
 	}
 	printf("===== Type checking complete. Found %u type(s)\n", type_checker.TypeCount);
-
+	
 	LLVMIRGen llvm = {0};
 	LLVMInit(&llvm, type_checker.Arena);
 	llvm.Types = type_checker.Types;

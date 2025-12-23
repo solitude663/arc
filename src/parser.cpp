@@ -102,6 +102,38 @@ internal Token MatchType2(Parser* parser, TokenType t1, TokenType t2, u8 ch)
 	return result;
 }
 
+internal Token MatchType3(Parser* parser, TokenType t1, TokenType t2, u8 ch2,
+	TokenType t3, u8 ch3)
+{
+	Token result;
+	u8 next = PeekChar(parser);
+	if(next == ch2)
+	{
+		result.Type = t2;
+		result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 2);
+
+		// TODO(afb) :: Change to be able to advance multiple times
+		AdvanceChar(parser);
+		AdvanceChar(parser);
+	}
+	else if(next == ch3)
+	{
+		result.Type = t3;
+		result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 2);
+
+		// TODO(afb) :: Change to be able to advance multiple times
+		AdvanceChar(parser);
+		AdvanceChar(parser);
+	}
+	else
+	{
+		result.Type = t1;
+		result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
+		AdvanceChar(parser);
+	}
+	return result;
+}
+
 internal Token ParseToken(Parser* parser)
 {
 	Token result = {};	
@@ -134,7 +166,8 @@ internal Token ParseToken(Parser* parser)
 
 		case(':'):
 		{
-			result = MatchType2(parser, (TokenType)':', Token_ColonColon, ':');
+			result = MatchType3(parser, (TokenType)':', Token_ColonColon, ':',
+								Token_ColonEqual, '=');
 		}break;
 		
 		case(0):
@@ -548,14 +581,30 @@ internal ASTNode* ParseStatement(Parser* parser)
 
 				case(Token_ColonColon):
 				{
-					// AdvanceToken(parser, 2);
-					// NOTE:TODO(afb) :: Constant declaration						{
-					LogPanic(0, "Unhandled constant declarartion");
+					AdvanceToken(parser, 2);
+					ASTNode* value = ParseExpression(parser);
+					MatchToken(parser, Token_SemiColon);
 					
-					// TODO(afb) :: Ensure type is valid
-					// MatchToken(parser, Token_SemiColon);
+					result = CreateASTNode(parser->Arena, Node_VariableDeclaration);
+					result->VDecl.Ident = current_token;
+					result->VDecl.Value = value;
+					result->VDecl.Constant = true;
+					result->VDecl.Implicit = true;
 				}break;
 
+				case(Token_ColonEqual):
+				{
+					AdvanceToken(parser, 2);
+					ASTNode* value = ParseExpression(parser);
+					MatchToken(parser, Token_SemiColon);
+					
+					result = CreateASTNode(parser->Arena, Node_VariableDeclaration);
+					result->VDecl.Ident = current_token;
+					result->VDecl.Value = value;
+					result->VDecl.Implicit = true;
+				}break;
+
+				
 				case(Token_Equal):
 				{
 					AdvanceToken(parser, 2);

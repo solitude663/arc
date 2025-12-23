@@ -329,7 +329,7 @@ internal LLVMValueRef GenIR(LLVMIRGen* llvm, ASTNode* node)
 				TypeCheckerError(tc, 1, 1, "Reference to undeclared variable '%.*s'",
 								 Str8Print(node->Assignment.Ident.Lexeme));
 			}
-
+			
 			result = GetTypeIndex(tc, Type_Void);
 			node->Scope = sym_table;
 		}break;

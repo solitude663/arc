@@ -57,13 +57,12 @@ struct TypeInfo
 struct Symbol
 {
 	TypeIndex Type;
-	String8 Name;
+	String8 Name;	
+	b32 Constant;
 
 	LLVMValueRef Value;
-
+	
 	Symbol* Next;
-
-	// b32 IsConstant;
 };
 
 struct SymbolTable
