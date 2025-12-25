@@ -152,8 +152,6 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 		{
 			result = GetTypeIndex(tc, Type_Int);
 			Assert(result > -1);
-			
-			// node->StackSize = tc->Types[result].Size;
 			node->EvalType = result;
 		}break;
 
@@ -161,8 +159,6 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 		{
 			result = GetTypeIndex(tc, Type_Float);
 			Assert(result > -1);
-			
-			// node->StackSize = tc->Types[result].Size;
 			node->EvalType = result;
 		}break;
 
@@ -171,8 +167,6 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 		{
 			result = GetTypeIndex(tc, Type_Bool);
 			Assert(result > -1);
-			
-			// node->StackSize = tc->Types[result].Size;
 			node->EvalType = result;
 		}break;
 #endif
@@ -227,7 +221,6 @@ internal TypeIndex CheckNode(TypeChecker* tc, SymbolTable* sym_table, ASTNode* n
 					}
 					else
 					{
-						printf("BAD\n");
 						Unhandled();
 						// TODO(afb) :: Type checking error
 						TypeCheckerError(tc, 1, 1,

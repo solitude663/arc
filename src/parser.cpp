@@ -50,7 +50,7 @@ internal TokenType GetKeywordOrIdentifier(const String8& lexeme)
 	if(lexeme == "bool") result = Token_Bool;
 	if(lexeme == "true") result = Token_True;
 	if(lexeme == "false") result = Token_False;
-	if(lexeme == "extern") result = Token_Extern;
+	if(lexeme == "#extern") result = Token_Extern;
 	return result;
 }
 
@@ -232,6 +232,26 @@ internal Token ParseToken(Parser* parser)
 
 				result.Lexeme = Substr8(parser->Data, start, end - start);
 				result.Type = GetKeywordOrIdentifier(result.Lexeme);
+			}
+			else if(current == '#')  // NOTE(afb) :: Macros or attributes
+			{
+				u64 start = parser->CurrentOffset;
+				AdvanceChar(parser);
+				current = CurrentChar(parser);
+				while((IsDigit(current) || IsAlpha(current) || current == '_'))
+				{
+					AdvanceChar(parser);
+					current = CurrentChar(parser);
+				}				
+				u64 end = parser->CurrentOffset;
+
+				result.Lexeme = Substr8(parser->Data, start, end - start);
+				result.Type = GetKeywordOrIdentifier(result.Lexeme);
+				if(result.Type == Token_Identifier)
+				{
+					result.Type = Token_Invalid;
+					result.Lexeme = Substr8(parser->Data, parser->CurrentOffset, 1);
+				}
 			}
 			else
 			{

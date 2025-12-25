@@ -12,5 +12,6 @@ pointer_add :: (a: *int, offset: int) *int {
 }
 
 main :: ()  {
-     sum(1, 2, 3, 4, 5);     
+     x: int;
+     x = sum(1, 2, 3, 4, 5);     
 }

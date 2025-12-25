@@ -181,7 +181,6 @@ internal LLVMValueRef GenIR(LLVMIRGen* llvm, ASTNode* node)
 		
 		case(Node_FunctionPrototype):
 		{
-			printf("Func proto\n");
 			TempArena temp = GetScratch(llvm->Arena);
 			
 			i32 arg_count = node->Proto.ArgCount;
@@ -221,7 +220,6 @@ internal LLVMValueRef GenIR(LLVMIRGen* llvm, ASTNode* node)
 
 		case(Node_Function):
 		{
-			printf("Func start\n");
 			ASTNode* proto = node->Func.Prototype;
 			const char* fn_name = (const char*)proto->Proto.Name.Lexeme.Str;
 			u64 fn_name_length = proto->Proto.Name.Lexeme.Length;
@@ -312,43 +310,14 @@ internal LLVMValueRef GenIR(LLVMIRGen* llvm, ASTNode* node)
 				Assert(0);
 			}
 		}break;
-#if 0
-		case(Node_Assignment):
-		{				
-			Symbol* sym = GetSymbol(sym_table, node->Assignment.Ident.Lexeme);
-			if(sym)
-			{
-				TypeIndex t1 = CheckNode(tc, sym_table, node->Assignment.Value);
-				if(t1 != sym->Type)
-				{
-					TypeCheckerError(tc, 1, 1, "Type of LHS and does not match type of RHS");
-				}
-			}
-			else
-			{
-				TypeCheckerError(tc, 1, 1, "Reference to undeclared variable '%.*s'",
-								 Str8Print(node->Assignment.Ident.Lexeme));
-			}
-			
-			result = GetTypeIndex(tc, Type_Void);
-			node->Scope = sym_table;
-		}break;
-
-		case(Node_Block):
+				
+		case(Node_FunctionCall):
 		{
-			SymbolTable* table = PushStructZero(tc->Arena, SymbolTable);
-			table->Parent = sym_table;			
-
-			for(ASTNode* n = node->Block.Stmts; n != 0; n = n->Next)
-			{
-				CheckNode(tc, table, n);
-				node->StackSize += n->StackSize;
-			}
-
-			result = GetTypeIndex(tc, Type_Void);
-			node->Scope = table;
+			FunctionCallNode* fn = &node->FCall;
+			
 		}break;
-		
+
+#if 0		
 		case(Node_FunctionCall):
 		{
 			FunctionCallNode* func = &node->FCall;
@@ -378,7 +347,6 @@ internal LLVMValueRef GenIR(LLVMIRGen* llvm, ASTNode* node)
 		
 		default:
 		{
-			printf("%d\n", node->Type);
 			Unhandled();
 		}break;
 	}
